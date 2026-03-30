@@ -196,6 +196,14 @@ button.primary {
   color: #fff;
 }
 
+.button.disabled {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border-color: var(--line);
+  cursor: default;
+  pointer-events: none;
+}
+
 .button.primary:hover,
 button.primary:hover {
   background: var(--accent-hover);

@@ -7,7 +7,7 @@ const {
   joinVoiceChannel,
 } = require("@discordjs/voice");
 const prism = require("prism-media");
-const { parseVoiceCommand } = require("./commandParser");
+const { parseVoiceCommand, similarityScore } = require("./commandParser");
 const { transcribePcmBuffer } = require("./transcriber");
 
 function createBot({ config, store }) {
@@ -119,11 +119,37 @@ function createBot({ config, store }) {
     });
   }
 
-  async function findMemberByName(guild, rawName) {
-    const lookup = rawName.trim().toLowerCase();
-    const members = await guild.members.fetch();
+  function scoreMemberName(candidate, lookup) {
+    const normalizedCandidate = String(candidate ?? "").trim().toLowerCase();
+    const normalizedLookup = String(lookup ?? "").trim().toLowerCase();
 
-    let bestMatch = null;
+    if (!normalizedCandidate || !normalizedLookup) {
+      return -1;
+    }
+
+    if (normalizedCandidate === normalizedLookup) {
+      return 1;
+    }
+
+    if (
+      normalizedCandidate.startsWith(normalizedLookup) ||
+      normalizedLookup.startsWith(normalizedCandidate)
+    ) {
+      return 0.92;
+    }
+
+    if (
+      normalizedCandidate.includes(normalizedLookup) ||
+      normalizedLookup.includes(normalizedCandidate)
+    ) {
+      return 0.82;
+    }
+
+    return similarityScore(normalizedCandidate, normalizedLookup);
+  }
+
+  function findBestMemberInCollection(members, lookup) {
+    let bestMember = null;
     let bestScore = -1;
 
     for (const member of members.values()) {
@@ -136,33 +162,73 @@ function createBot({ config, store }) {
         member.user.username,
         member.nickname,
         member.user.globalName,
-      ]
-        .filter(Boolean)
-        .map((name) => name.toLowerCase());
+      ].filter(Boolean);
 
       for (const candidate of candidates) {
-        let score = -1;
-
-        if (candidate === lookup) {
-          score = 100;
-        } else if (candidate.startsWith(lookup) || lookup.startsWith(candidate)) {
-          score = 75;
-        } else if (candidate.includes(lookup) || lookup.includes(candidate)) {
-          score = 50;
-        }
-
+        const score = scoreMemberName(candidate, lookup);
         if (score > bestScore) {
           bestScore = score;
-          bestMatch = member;
+          bestMember = member;
         }
       }
     }
 
-    return bestScore >= 50 ? bestMatch : null;
+    return { member: bestMember, score: bestScore };
+  }
+
+  async function findMemberByName(guild, rawName) {
+    const lookup = rawName.trim().toLowerCase();
+    let best = findBestMemberInCollection(guild.members.cache, lookup);
+
+    if (best.score >= 0.9) {
+      return best.member;
+    }
+
+    const searchedMembers = await guild.members
+      .search({ query: rawName.slice(0, 32), limit: 10, cache: true })
+      .catch(() => null);
+    if (searchedMembers?.size) {
+      const searchedBest = findBestMemberInCollection(searchedMembers, lookup);
+      if (searchedBest.score > best.score) {
+        best = searchedBest;
+      }
+    }
+
+    if (best.score >= 0.74) {
+      return best.member;
+    }
+
+    if (guild.memberCount <= 250) {
+      const fetchedMembers = await guild.members.fetch().catch(() => null);
+      if (fetchedMembers?.size) {
+        const fetchedBest = findBestMemberInCollection(fetchedMembers, lookup);
+        if (fetchedBest.score > best.score) {
+          best = fetchedBest;
+        }
+      }
+    }
+
+    return best.score >= 0.68 ? best.member : null;
   }
 
   async function getGuildSettings(guild) {
     return store.getGuildSettings(guild.id, guild.name);
+  }
+
+  async function syncBotPresence(clientInstance) {
+    if (typeof store.resetBotPresence === "function") {
+      await store.resetBotPresence();
+    }
+
+    if (typeof store.updateBotPresence !== "function") {
+      return;
+    }
+
+    await Promise.all(
+      clientInstance.guilds.cache.map((guild) =>
+        store.updateBotPresence(guild.id, guild.name, true)
+      )
+    );
   }
 
   function memberHasDashboardAdmin(member, guildSettings) {
@@ -193,10 +259,8 @@ function createBot({ config, store }) {
     return guildSettings.allowedRoleIds.some((roleId) => member.roles.cache.has(roleId));
   }
 
-  async function executeVoiceCommand(guild, session, command, transcript) {
-    const controller = await guild.members.fetch(session.ownerUserId);
+  async function executeVoiceCommand(guild, session, command, transcript, guildSettings, controller) {
     const controllerChannel = controller.voice.channel;
-    const guildSettings = await getGuildSettings(guild);
 
     if (!controllerChannel) {
       throw new Error("The session owner is no longer in a voice channel.");
@@ -385,7 +449,14 @@ function createBot({ config, store }) {
         speaker: speaker.user.tag,
         transcript,
       });
-      await executeVoiceCommand(guild, session, command, transcript);
+      await executeVoiceCommand(
+        guild,
+        session,
+        command,
+        transcript,
+        guildSettings,
+        controller
+      );
     } catch (error) {
       log("Voice command failed", error);
       await sendStatus(guild, `Voice command failed: ${error.message}`);
@@ -465,8 +536,21 @@ function createBot({ config, store }) {
     ].join("\n");
   }
 
-  client.once("ready", () => {
+  client.once("clientReady", async () => {
     log(`Logged in as ${client.user.tag}`);
+    await syncBotPresence(client);
+  });
+
+  client.on("guildCreate", async (guild) => {
+    if (typeof store.updateBotPresence === "function") {
+      await store.updateBotPresence(guild.id, guild.name, true);
+    }
+  });
+
+  client.on("guildDelete", async (guild) => {
+    if (typeof store.updateBotPresence === "function") {
+      await store.updateBotPresence(guild.id, guild.name, false);
+    }
   });
 
   client.on("messageCreate", async (message) => {

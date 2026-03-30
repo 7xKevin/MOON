@@ -33,7 +33,7 @@ function hasGuildAccess(guild, config, sessionUser) {
   return (permissions & ADMIN_MASK) !== 0n;
 }
 
-function buildBotInviteUrl(config) {
+function buildBotInviteUrl(config, guildId) {
   if (!config.DISCORD_CLIENT_ID) {
     return null;
   }
@@ -50,6 +50,11 @@ function buildBotInviteUrl(config) {
         Number(PermissionsBitField.Flags.ManageChannels)
     ),
   });
+
+  if (guildId) {
+    params.set("guild_id", guildId);
+    params.set("disable_guild_select", "true");
+  }
 
   return `https://discord.com/oauth2/authorize?${params.toString()}`;
 }
@@ -122,8 +127,9 @@ function requireCsrf(req, res, next) {
   next();
 }
 
-function mapGuildForm(req, config) {
+function mapGuildForm(req, config, existingSettings = {}) {
   return normalizeGuildSettings({
+    ...existingSettings,
     guildId: req.params.guildId,
     guildName: req.body.guildName,
     botEnabled: parseBoolean(req.body.botEnabled),
@@ -267,13 +273,24 @@ function createWebApp({ config, store }) {
     });
   });
 
-  app.get("/dashboard", requireAuth, (req, res) => {
-    const accessibleGuilds = normalizeGuildList(req.session.guilds ?? [], config, req.session.user);
+  app.get("/dashboard", requireAuth, async (req, res, next) => {
+    try {
+      const accessibleGuilds = normalizeGuildList(req.session.guilds ?? [], config, req.session.user);
+      const guilds = await Promise.all(
+        accessibleGuilds.map(async (guild) => ({
+          ...guild,
+          inviteUrl: buildBotInviteUrl(config, guild.id),
+          settings: await store.getGuildSettings(guild.id, guild.name),
+        }))
+      );
 
-    res.render("dashboard", {
-      title: "Dashboard",
-      guilds: accessibleGuilds,
-    });
+      res.render("dashboard", {
+        title: "Dashboard",
+        guilds,
+      });
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.get("/guilds/:guildId", requireAuth, async (req, res, next) => {
@@ -289,6 +306,7 @@ function createWebApp({ config, store }) {
       res.render("guild", {
         title: `${guild.name} Settings`,
         guild,
+        inviteUrl: buildBotInviteUrl(config, guild.id),
         saved: req.query.saved === "1",
         settings,
         defaultSettings: createDefaultGuildSettings(guild.id, guild.name),
@@ -306,7 +324,8 @@ function createWebApp({ config, store }) {
         return;
       }
 
-      const nextSettings = mapGuildForm(req, config);
+      const currentSettings = await store.getGuildSettings(guild.id, guild.name);
+      const nextSettings = mapGuildForm(req, config, currentSettings);
       nextSettings.guildName = guild.name;
       await store.saveGuildSettings(nextSettings);
 

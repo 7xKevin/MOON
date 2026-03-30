@@ -50,7 +50,12 @@
         <section class="card">
           <div class="card-body form-shell">
             <div>
-              <span class="eyebrow">Guild configuration</span>
+              <div class="badge-row">
+                <span class="eyebrow">Guild configuration</span>
+                <span class="badge <%= settings.botPresent ? 'live' : '' %>">
+                  <%= settings.botPresent ? 'MOON is already in this server' : 'MOON is not in this server yet' %>
+                </span>
+              </div>
               <h2 class="section-title" style="margin-top: 10px;">Define exactly who MOON listens to.</h2>
               <p class="section-lead">
                 The session starter always keeps control. Discord admins keep access too. Everything else here is optional.
@@ -184,8 +189,10 @@
 
               <div class="inline-actions">
                 <button class="primary" type="submit">Save Settings</button>
-                <% if (botInviteUrl) { %>
-                  <a class="button" href="<%= botInviteUrl %>" target="_blank" rel="noreferrer">Invite MOON</a>
+                <% if (settings.botPresent) { %>
+                  <span class="button disabled">Already Invited</span>
+                <% } else if (inviteUrl) { %>
+                  <a class="button" href="<%= inviteUrl %>" target="_blank" rel="noreferrer">Invite MOON</a>
                 <% } %>
               </div>
             </form>

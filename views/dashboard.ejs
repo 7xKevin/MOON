@@ -78,11 +78,19 @@
               <div class="card-body">
                 <div class="badge-row" style="margin-bottom: 12px;">
                   <span class="badge live">Admin access</span>
+                  <span class="badge <%= guild.settings.botPresent ? 'live' : '' %>">
+                    <%= guild.settings.botPresent ? 'MOON invited' : 'MOON not invited' %>
+                  </span>
                 </div>
                 <h3 class="guild-name"><%= guild.name %></h3>
                 <div class="meta">Guild ID: <code><%= guild.id %></code></div>
                 <div class="inline-actions" style="margin-top: 14px;">
                   <a class="button primary" href="/guilds/<%= guild.id %>">Open Settings</a>
+                  <% if (guild.settings.botPresent) { %>
+                    <span class="button disabled">Already Invited</span>
+                  <% } else if (guild.inviteUrl) { %>
+                    <a class="button" href="<%= guild.inviteUrl %>" target="_blank" rel="noreferrer">Invite MOON</a>
+                  <% } %>
                 </div>
               </div>
             </article>

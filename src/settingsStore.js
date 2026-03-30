@@ -50,6 +50,8 @@ function normalizeGuildSettings(input = {}, defaults = {}) {
     allowedRoleIds: parseStringList(input.allowedRoleIds),
     preferredTextChannelId: input.preferredTextChannelId ? String(input.preferredTextChannelId).trim() : "",
     preferredVoiceChannelId: input.preferredVoiceChannelId ? String(input.preferredVoiceChannelId).trim() : "",
+    botPresent: input.botPresent === true,
+    botLastSeenAt: input.botLastSeenAt ? new Date(input.botLastSeenAt).toISOString() : null,
     debugTranscripts: input.debugTranscripts === true,
     wakeWord: String(input.wakeWord ?? defaults.wakeWord ?? "moon").trim() || "moon",
     requireWakeWord:
@@ -73,10 +75,13 @@ function normalizeGuildSettings(input = {}, defaults = {}) {
 }
 
 function createDefaultGuildSettings(guildId, guildName, defaults = {}) {
-  return normalizeGuildSettings({
-    guildId,
-    guildName,
-  }, defaults);
+  return normalizeGuildSettings(
+    {
+      guildId,
+      guildName,
+    },
+    defaults
+  );
 }
 
 class FileSettingsStore {
@@ -124,6 +129,30 @@ class FileSettingsStore {
     await this.writeAll(all);
     return normalized;
   }
+
+  async resetBotPresence() {
+    const all = await this.readAll();
+
+    for (const guildId of Object.keys(all)) {
+      all[guildId] = {
+        ...all[guildId],
+        botPresent: false,
+      };
+    }
+
+    await this.writeAll(all);
+  }
+
+  async updateBotPresence(guildId, guildName, botPresent) {
+    const current = await this.getGuildSettings(guildId, guildName);
+    return this.saveGuildSettings({
+      ...current,
+      guildId,
+      guildName,
+      botPresent,
+      botLastSeenAt: botPresent ? new Date().toISOString() : current.botLastSeenAt,
+    });
+  }
 }
 
 class PostgresSettingsStore {
@@ -151,6 +180,8 @@ class PostgresSettingsStore {
         allowed_role_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
         preferred_text_channel_id TEXT,
         preferred_voice_channel_id TEXT,
+        bot_present BOOLEAN NOT NULL DEFAULT FALSE,
+        bot_last_seen_at TIMESTAMPTZ,
         debug_transcripts BOOLEAN NOT NULL DEFAULT FALSE,
         wake_word TEXT NOT NULL DEFAULT 'moon',
         require_wake_word BOOLEAN NOT NULL DEFAULT TRUE,
@@ -166,6 +197,8 @@ class PostgresSettingsStore {
 
     await this.pool.query(`
       ALTER TABLE guild_settings
+      ADD COLUMN IF NOT EXISTS bot_present BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS bot_last_seen_at TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS wake_word TEXT NOT NULL DEFAULT 'moon',
       ADD COLUMN IF NOT EXISTS require_wake_word BOOLEAN NOT NULL DEFAULT TRUE,
       ADD COLUMN IF NOT EXISTS transcription_silence_ms INTEGER NOT NULL DEFAULT 1200,
@@ -184,26 +217,31 @@ class PostgresSettingsStore {
     }
 
     const row = result.rows[0];
-    return normalizeGuildSettings({
-      guildId: row.guild_id,
-      guildName: row.guild_name,
-      botEnabled: row.bot_enabled,
-      adminUserIds: row.admin_user_ids,
-      commandUserIds: row.command_user_ids,
-      allowedRoleIds: row.allowed_role_ids,
-      preferredTextChannelId: row.preferred_text_channel_id,
-      preferredVoiceChannelId: row.preferred_voice_channel_id,
-      debugTranscripts: row.debug_transcripts,
-      wakeWord: row.wake_word,
-      requireWakeWord: row.require_wake_word,
-      transcriptionSilenceMs: row.transcription_silence_ms,
-      commandCooldownMs: row.command_cooldown_ms,
-      commandDragEnabled: row.command_drag_enabled,
-      commandMuteEnabled: row.command_mute_enabled,
-      commandKickEnabled: row.command_kick_enabled,
-      commandLockEnabled: row.command_lock_enabled,
-      updatedAt: row.updated_at,
-    }, this.defaults);
+    return normalizeGuildSettings(
+      {
+        guildId: row.guild_id,
+        guildName: row.guild_name,
+        botEnabled: row.bot_enabled,
+        adminUserIds: row.admin_user_ids,
+        commandUserIds: row.command_user_ids,
+        allowedRoleIds: row.allowed_role_ids,
+        preferredTextChannelId: row.preferred_text_channel_id,
+        preferredVoiceChannelId: row.preferred_voice_channel_id,
+        botPresent: row.bot_present,
+        botLastSeenAt: row.bot_last_seen_at,
+        debugTranscripts: row.debug_transcripts,
+        wakeWord: row.wake_word,
+        requireWakeWord: row.require_wake_word,
+        transcriptionSilenceMs: row.transcription_silence_ms,
+        commandCooldownMs: row.command_cooldown_ms,
+        commandDragEnabled: row.command_drag_enabled,
+        commandMuteEnabled: row.command_mute_enabled,
+        commandKickEnabled: row.command_kick_enabled,
+        commandLockEnabled: row.command_lock_enabled,
+        updatedAt: row.updated_at,
+      },
+      this.defaults
+    );
   }
 
   async saveGuildSettings(settings) {
@@ -220,6 +258,8 @@ class PostgresSettingsStore {
           allowed_role_ids,
           preferred_text_channel_id,
           preferred_voice_channel_id,
+          bot_present,
+          bot_last_seen_at,
           debug_transcripts,
           wake_word,
           require_wake_word,
@@ -232,7 +272,7 @@ class PostgresSettingsStore {
           updated_at
         )
         VALUES (
-          $1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW()
+          $1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW()
         )
         ON CONFLICT (guild_id)
         DO UPDATE SET
@@ -243,6 +283,8 @@ class PostgresSettingsStore {
           allowed_role_ids = EXCLUDED.allowed_role_ids,
           preferred_text_channel_id = EXCLUDED.preferred_text_channel_id,
           preferred_voice_channel_id = EXCLUDED.preferred_voice_channel_id,
+          bot_present = EXCLUDED.bot_present,
+          bot_last_seen_at = EXCLUDED.bot_last_seen_at,
           debug_transcripts = EXCLUDED.debug_transcripts,
           wake_word = EXCLUDED.wake_word,
           require_wake_word = EXCLUDED.require_wake_word,
@@ -263,6 +305,8 @@ class PostgresSettingsStore {
         JSON.stringify(normalized.allowedRoleIds),
         normalized.preferredTextChannelId || null,
         normalized.preferredVoiceChannelId || null,
+        normalized.botPresent,
+        normalized.botLastSeenAt ? new Date(normalized.botLastSeenAt) : null,
         normalized.debugTranscripts,
         normalized.wakeWord,
         normalized.requireWakeWord,
@@ -276,6 +320,21 @@ class PostgresSettingsStore {
     );
 
     return this.getGuildSettings(normalized.guildId, normalized.guildName);
+  }
+
+  async resetBotPresence() {
+    await this.pool.query(`UPDATE guild_settings SET bot_present = FALSE`);
+  }
+
+  async updateBotPresence(guildId, guildName, botPresent) {
+    const current = await this.getGuildSettings(guildId, guildName);
+    return this.saveGuildSettings({
+      ...current,
+      guildId,
+      guildName,
+      botPresent,
+      botLastSeenAt: botPresent ? new Date().toISOString() : current.botLastSeenAt,
+    });
   }
 }
 
