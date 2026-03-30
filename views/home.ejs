@@ -25,9 +25,6 @@
             <% if (currentUser) { %>
               <a class="nav-item" href="/dashboard">Dashboard</a>
             <% } %>
-            <% if (botInviteUrl) { %>
-              <a class="nav-item" href="<%= botInviteUrl %>" target="_blank" rel="noreferrer">Invite Bot</a>
-            <% } %>
           </nav>
         </div>
       </aside>
@@ -71,9 +68,6 @@
                 <% } else { %>
                   <a class="button primary" href="/login">Connect Discord</a>
                 <% } %>
-                <% if (botInviteUrl) { %>
-                  <a class="button" href="<%= botInviteUrl %>" target="_blank" rel="noreferrer">Invite MOON</a>
-                <% } %>
               </div>
             </div>
           </article>
@@ -111,3 +105,4 @@
     </div>
   </body>
 </html>
+

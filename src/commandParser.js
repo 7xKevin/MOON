@@ -195,33 +195,27 @@ function parseFixedCommand(commandText, rawTranscript) {
         type: command.type,
         transcript: commandText,
         rawTranscript,
-        score: aliasMatch.score,
+        confidence: aliasMatch.score,
+        matchType: "alias",
       };
     }
 
     if (
       hasKeywordMatch(commandText, command.verbs, 0.72) &&
       hasKeywordMatch(commandText, channelTerms, 0.6) &&
-      (!best || 0.7 > best.score)
+      (!best || 0.7 > best.confidence)
     ) {
       best = {
         type: command.type,
         transcript: commandText,
         rawTranscript,
-        score: 0.7,
+        confidence: 0.7,
+        matchType: "keyword",
       };
     }
   }
 
-  if (!best) {
-    return null;
-  }
-
-  return {
-    type: best.type,
-    transcript: best.transcript,
-    rawTranscript: best.rawTranscript,
-  };
+  return best;
 }
 
 function parseTargetCommand(commandText, rawTranscript) {
@@ -244,10 +238,10 @@ function parseTargetCommand(commandText, rawTranscript) {
 
   for (const action of actionGroups) {
     const match = bestMatch(firstWord, action.verbs, 0.58);
-    if (match && (!bestAction || match.score > bestAction.score)) {
+    if (match && (!bestAction || match.score > bestAction.confidence)) {
       bestAction = {
         type: action.type,
-        score: match.score,
+        confidence: match.score,
       };
     }
   }
@@ -271,6 +265,7 @@ function parseTargetCommand(commandText, rawTranscript) {
       targetName,
       transcript: commandText,
       rawTranscript,
+      confidence: bestAction.confidence,
     };
   }
 
@@ -283,6 +278,7 @@ function parseTargetCommand(commandText, rawTranscript) {
     targetName: remainder,
     transcript: commandText,
     rawTranscript,
+    confidence: bestAction.confidence,
   };
 }
 

@@ -32,6 +32,20 @@ function createBot({ config, store }) {
     console.log(`[MOON] ${message}`);
   }
 
+  function createUserFacingError(message) {
+    return Object.assign(new Error(message), {
+      userFacingMessage: message,
+    });
+  }
+
+  function formatUserFacingError(error, fallback) {
+    if (error?.userFacingMessage) {
+      return error.userFacingMessage;
+    }
+
+    return fallback;
+  }
+
   function getSession(guildId) {
     return sessions.get(guildId);
   }
@@ -148,15 +162,13 @@ function createBot({ config, store }) {
     return similarityScore(normalizedCandidate, normalizedLookup);
   }
 
-  function findBestMemberInCollection(members, lookup) {
-    let bestMember = null;
-    let bestScore = -1;
-
+  function collectMemberScores(members, lookup, scoreMap) {
     for (const member of members.values()) {
       if (member.user.bot) {
         continue;
       }
 
+      let bestCandidateScore = -1;
       const candidates = [
         member.displayName,
         member.user.username,
@@ -166,49 +178,65 @@ function createBot({ config, store }) {
 
       for (const candidate of candidates) {
         const score = scoreMemberName(candidate, lookup);
-        if (score > bestScore) {
-          bestScore = score;
-          bestMember = member;
+        if (score > bestCandidateScore) {
+          bestCandidateScore = score;
         }
       }
-    }
 
-    return { member: bestMember, score: bestScore };
+      if (bestCandidateScore < 0) {
+        continue;
+      }
+
+      const existing = scoreMap.get(member.id);
+      if (!existing || bestCandidateScore > existing.score) {
+        scoreMap.set(member.id, { member, score: bestCandidateScore });
+      }
+    }
+  }
+
+  function getTopMemberMatches(scoreMap) {
+    return [...scoreMap.values()].sort((left, right) => right.score - left.score);
   }
 
   async function findMemberByName(guild, rawName) {
     const lookup = rawName.trim().toLowerCase();
-    let best = findBestMemberInCollection(guild.members.cache, lookup);
+    const scoreMap = new Map();
 
-    if (best.score >= 0.9) {
-      return best.member;
-    }
+    collectMemberScores(guild.members.cache, lookup, scoreMap);
 
     const searchedMembers = await guild.members
-      .search({ query: rawName.slice(0, 32), limit: 10, cache: true })
+      .search({ query: rawName.slice(0, 32), limit: 25, cache: true })
       .catch(() => null);
     if (searchedMembers?.size) {
-      const searchedBest = findBestMemberInCollection(searchedMembers, lookup);
-      if (searchedBest.score > best.score) {
-        best = searchedBest;
-      }
+      collectMemberScores(searchedMembers, lookup, scoreMap);
     }
 
-    if (best.score >= 0.74) {
-      return best.member;
-    }
-
-    if (guild.memberCount <= 250) {
+    let ranked = getTopMemberMatches(scoreMap);
+    if ((!ranked.length || ranked[0].score < 0.82) && guild.memberCount <= 250) {
       const fetchedMembers = await guild.members.fetch().catch(() => null);
       if (fetchedMembers?.size) {
-        const fetchedBest = findBestMemberInCollection(fetchedMembers, lookup);
-        if (fetchedBest.score > best.score) {
-          best = fetchedBest;
-        }
+        collectMemberScores(fetchedMembers, lookup, scoreMap);
+        ranked = getTopMemberMatches(scoreMap);
       }
     }
 
-    return best.score >= 0.68 ? best.member : null;
+    const [best, second] = ranked;
+    if (!best || best.score < 0.72) {
+      return {
+        member: null,
+        score: best?.score ?? -1,
+        ambiguous: false,
+        secondMember: second?.member ?? null,
+      };
+    }
+
+    const ambiguous = Boolean(second && best.score - second.score < 0.05);
+    return {
+      member: best.member,
+      score: best.score,
+      ambiguous,
+      secondMember: second?.member ?? null,
+    };
   }
 
   async function getGuildSettings(guild) {
@@ -259,15 +287,40 @@ function createBot({ config, store }) {
     return guildSettings.allowedRoleIds.some((roleId) => member.roles.cache.has(roleId));
   }
 
+  function getCommandConfidenceFloor(commandType) {
+    if (commandType === "kick" || commandType === "drag") {
+      return 0.82;
+    }
+
+    if (commandType === "mute" || commandType === "unmute") {
+      return 0.76;
+    }
+
+    return 0.74;
+  }
+
+  function getTargetConfidenceFloor(commandType) {
+    if (commandType === "kick" || commandType === "drag") {
+      return 0.86;
+    }
+
+    return 0.8;
+  }
+
   async function executeVoiceCommand(guild, session, command, transcript, guildSettings, controller) {
     const controllerChannel = controller.voice.channel;
 
     if (!controllerChannel) {
-      throw new Error("The session owner is no longer in a voice channel.");
+      throw createUserFacingError("The session owner is no longer in a voice channel.");
     }
 
     if (!guildSettings.botEnabled) {
       await sendStatus(guild, "This server has MOON paused in the dashboard.");
+      return;
+    }
+
+    if ((command.confidence ?? 1) < getCommandConfidenceFloor(command.type)) {
+      await sendStatus(guild, `I heard \`${transcript}\`, but I am not confident enough to run that command.`);
       return;
     }
 
@@ -311,14 +364,35 @@ function createBot({ config, store }) {
       return;
     }
 
-    const target = await findMemberByName(guild, command.targetName);
-    if (!target) {
+    const targetMatch = await findMemberByName(guild, command.targetName);
+    if (!targetMatch.member) {
       await sendStatus(
         guild,
-        `I heard \`${transcript}\`, but I couldn't find **${command.targetName}**.`
+        `I heard \`${transcript}\`, but I couldn't confidently find **${command.targetName}**.`
       );
       return;
     }
+
+    if (targetMatch.ambiguous) {
+      const secondName = targetMatch.secondMember?.displayName || targetMatch.secondMember?.user?.username;
+      await sendStatus(
+        guild,
+        secondName
+          ? `I heard \`${transcript}\`, but **${command.targetName}** looks ambiguous between **${targetMatch.member.displayName}** and **${secondName}**.`
+          : `I heard \`${transcript}\`, but **${command.targetName}** looks ambiguous.`
+      );
+      return;
+    }
+
+    if (targetMatch.score < getTargetConfidenceFloor(command.type)) {
+      await sendStatus(
+        guild,
+        `I heard \`${transcript}\`, but I am not confident enough that **${targetMatch.member.displayName}** is the right target.`
+      );
+      return;
+    }
+
+    const target = targetMatch.member;
 
     if (command.type === "drag") {
       if (!target.voice.channel) {
@@ -381,9 +455,9 @@ function createBot({ config, store }) {
     };
   }
 
-  async function handleSpeech(guild, userId) {
+  async function processSpeech(guild, userId) {
     const session = getSession(guild.id);
-    if (!session || session.isProcessing) {
+    if (!session) {
       return;
     }
 
@@ -407,73 +481,129 @@ function createBot({ config, store }) {
     }
 
     const runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings);
-
     const now = Date.now();
     if (now - session.lastCommandAt < runtimeVoiceSettings.commandCooldownMs) {
       return;
     }
 
+    const pcmBuffer = await collectPcmBuffer(
+      session.receiver,
+      userId,
+      runtimeVoiceSettings.transcriptionSilenceMs
+    );
+    if (!pcmBuffer.length) {
+      return;
+    }
+
+    const transcript = await transcribePcmBuffer(pcmBuffer);
+    if (!transcript) {
+      return;
+    }
+
+    if (config.DEBUG_TRANSCRIPTS || guildSettings.debugTranscripts) {
+      await sendStatus(guild, `Transcript from **${speaker.displayName}**: \`${transcript}\``);
+    }
+
+    const command = parseVoiceCommand(transcript, {
+      wakeWord: runtimeVoiceSettings.wakeWord,
+      requireWakeWord: runtimeVoiceSettings.requireWakeWord,
+    });
+    if (!command) {
+      log(`Ignored transcript from ${speaker.user.tag}: ${transcript}`);
+      return;
+    }
+
+    session.lastCommandAt = Date.now();
+    log(`Executing command: ${command.type}`, {
+      guild: guild.name,
+      speaker: speaker.user.tag,
+      transcript,
+      confidence: command.confidence,
+    });
+
+    await executeVoiceCommand(
+      guild,
+      session,
+      command,
+      transcript,
+      guildSettings,
+      controller
+    );
+  }
+
+  async function drainSpeechQueue(guild) {
+    const session = getSession(guild.id);
+    if (!session || session.isProcessing) {
+      return;
+    }
+
+    const nextUserId = session.speechQueue.shift();
+    if (!nextUserId) {
+      return;
+    }
+
+    session.queuedUserIds.delete(nextUserId);
     session.isProcessing = true;
+    session.processingUserId = nextUserId;
 
     try {
-      const pcmBuffer = await collectPcmBuffer(
-        session.receiver,
-        userId,
-        runtimeVoiceSettings.transcriptionSilenceMs
-      );
-      if (!pcmBuffer.length) {
-        return;
-      }
-
-      const transcript = await transcribePcmBuffer(pcmBuffer);
-      if (!transcript) {
-        return;
-      }
-
-      if (config.DEBUG_TRANSCRIPTS || guildSettings.debugTranscripts) {
-        await sendStatus(guild, `Transcript from **${speaker.displayName}**: \`${transcript}\``);
-      }
-
-      const command = parseVoiceCommand(transcript, {
-        wakeWord: runtimeVoiceSettings.wakeWord,
-        requireWakeWord: runtimeVoiceSettings.requireWakeWord,
-      });
-      if (!command) {
-        log(`Ignored transcript from ${speaker.user.tag}: ${transcript}`);
-        return;
-      }
-
-      session.lastCommandAt = Date.now();
-      log(`Executing command: ${command.type}`, {
-        guild: guild.name,
-        speaker: speaker.user.tag,
-        transcript,
-      });
-      await executeVoiceCommand(
-        guild,
-        session,
-        command,
-        transcript,
-        guildSettings,
-        controller
-      );
+      await processSpeech(guild, nextUserId);
     } catch (error) {
-      log("Voice command failed", error);
-      await sendStatus(guild, `Voice command failed: ${error.message}`);
+      log("Voice command failed", error?.details ?? error);
+      await sendStatus(guild, formatUserFacingError(error, "Voice command failed. Please try again."));
     } finally {
-      session.isProcessing = false;
+      const latestSession = getSession(guild.id);
+      if (!latestSession) {
+        return;
+      }
+
+      latestSession.isProcessing = false;
+      latestSession.processingUserId = null;
+
+      if (latestSession.speechQueue.length > 0) {
+        setImmediate(() => {
+          drainSpeechQueue(guild).catch((error) => {
+            log("Queue drain failed", error?.details ?? error);
+          });
+        });
+      }
     }
+  }
+
+  function enqueueSpeech(guild, userId) {
+    const session = getSession(guild.id);
+    if (!session) {
+      return;
+    }
+
+    if (session.processingUserId === userId || session.queuedUserIds.has(userId)) {
+      return;
+    }
+
+    if (session.speechQueue.length >= 5) {
+      const droppedUserId = session.speechQueue.shift();
+      if (droppedUserId) {
+        session.queuedUserIds.delete(droppedUserId);
+      }
+    }
+
+    session.speechQueue.push(userId);
+    session.queuedUserIds.add(userId);
+
+    drainSpeechQueue(guild).catch((error) => {
+      log("Queue start failed", error?.details ?? error);
+    });
   }
 
   async function connectToMemberChannel(member, textChannel) {
     const voiceChannel = member.voice.channel;
     if (!voiceChannel) {
-      throw new Error("Join a voice channel first, then use !join.");
+      throw createUserFacingError("Join a voice channel first, then use !join.");
     }
 
     const guildSettings = await getGuildSettings(member.guild);
     if (!guildSettings.botEnabled) {
-      throw new Error("MOON is paused for this server in the dashboard.");
+      throw createUserFacingError("MOON is paused for this server in the dashboard.");
     }
 
     destroySession(member.guild.id);
@@ -489,9 +619,7 @@ function createBot({ config, store }) {
     await entersState(connection, VoiceConnectionStatus.Ready, 20000);
 
     const onSpeakingStart = (userId) => {
-      handleSpeech(member.guild, userId).catch((error) => {
-        log("Unhandled speech error", error);
-      });
+      enqueueSpeech(member.guild, userId);
     };
 
     const session = {
@@ -501,6 +629,9 @@ function createBot({ config, store }) {
       ownerUserId: config.CONTROLLER_USER_ID ?? member.id,
       textChannelId: guildSettings.preferredTextChannelId || textChannel.id,
       isProcessing: false,
+      processingUserId: null,
+      speechQueue: [],
+      queuedUserIds: new Set(),
       lastCommandAt: 0,
     };
 
@@ -605,8 +736,8 @@ function createBot({ config, store }) {
         await message.reply("Disconnected from voice.");
       }
     } catch (error) {
-      log("Text command failed", error);
-      await message.reply(`Command failed: ${error.message}`);
+      log("Text command failed", error?.details ?? error);
+      await message.reply(formatUserFacingError(error, "Command failed. Please try again."));
     }
   });
 
@@ -646,8 +777,8 @@ function createBot({ config, store }) {
       await entersState(session.connection, VoiceConnectionStatus.Ready, 20000);
       await sendStatus(newState.guild, `Moved to **${newState.channel.name}** with the session owner.`);
     } catch (error) {
-      log("Failed to follow session owner", error);
-      await sendStatus(newState.guild, `Couldn't follow the session owner: ${error.message}`);
+      log("Failed to follow session owner", error?.details ?? error);
+      await sendStatus(newState.guild, formatUserFacingError(error, "Couldn't follow the session owner."));
     }
   });
 

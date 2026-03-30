@@ -403,6 +403,7 @@ textarea {
   width: 16px;
   height: 16px;
   margin: 2px 0 0;
+  accent-color: var(--accent);
 }
 
 .toggle-copy {
@@ -462,3 +463,4 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+

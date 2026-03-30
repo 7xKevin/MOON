@@ -31,9 +31,10 @@ function runProcess(command, args, options = {}) {
       }
 
       reject(
-        new Error(
-          `Command failed (${command} ${args.join(" ")}):\n${stderr || stdout}`
-        )
+        Object.assign(new Error("Speech transcription failed."), {
+          command,
+          details: stderr || stdout,
+        })
       );
     });
   });
@@ -118,4 +119,3 @@ async function transcribePcmBuffer(pcmBuffer) {
 module.exports = {
   transcribePcmBuffer,
 };
-

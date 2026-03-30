@@ -83,6 +83,31 @@ async function exchangeCodeForToken(config, code) {
   return response.json();
 }
 
+async function refreshAccessToken(config, refreshToken) {
+  const body = new URLSearchParams({
+    client_id: config.DISCORD_CLIENT_ID,
+    client_secret: config.DISCORD_CLIENT_SECRET,
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+  });
+
+  const response = await fetch(`${DISCORD_API_BASE}/oauth2/token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
+
+  if (!response.ok) {
+    throw Object.assign(new Error("Your Discord session expired. Please log in again."), {
+      userFacingMessage: "Your Discord session expired. Please log in again.",
+    });
+  }
+
+  return response.json();
+}
+
 async function fetchDiscordResource(pathname, accessToken) {
   const response = await fetch(`${DISCORD_API_BASE}${pathname}`, {
     headers: {
@@ -159,6 +184,52 @@ function normalizeGuildList(guilds, config, sessionUser) {
   return guilds
     .filter((guild) => hasGuildAccess(guild, config, sessionUser))
     .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function formatDashboardError(error) {
+  if (error?.userFacingMessage) {
+    return error.userFacingMessage;
+  }
+
+  return "Something went wrong. Please try again.";
+}
+
+async function getDiscordAccessToken(req, config) {
+  const oauth = req.session.oauth;
+  if (!oauth?.accessToken) {
+    return null;
+  }
+
+  const expiresAt = oauth.expiresAt ?? 0;
+  if (expiresAt > Date.now() + 60_000) {
+    return oauth.accessToken;
+  }
+
+  if (!oauth.refreshToken) {
+    throw Object.assign(new Error("Your Discord session expired. Please log in again."), {
+      userFacingMessage: "Your Discord session expired. Please log in again.",
+    });
+  }
+
+  const refreshed = await refreshAccessToken(config, oauth.refreshToken);
+  req.session.oauth = {
+    accessToken: refreshed.access_token,
+    refreshToken: refreshed.refresh_token ?? oauth.refreshToken,
+    expiresAt: Date.now() + (refreshed.expires_in ?? 0) * 1000,
+  };
+
+  return req.session.oauth.accessToken;
+}
+
+async function loadSessionGuilds(req, config) {
+  const accessToken = await getDiscordAccessToken(req, config);
+  if (!accessToken) {
+    return req.session.guilds ?? [];
+  }
+
+  const guilds = await fetchDiscordResource("/users/@me/guilds", accessToken);
+  req.session.guilds = guilds;
+  return guilds;
 }
 
 function createWebApp({ config, store }) {
@@ -259,6 +330,11 @@ function createWebApp({ config, store }) {
         avatarUrl: avatarUrl(user),
       };
       req.session.guilds = guilds;
+      req.session.oauth = {
+        accessToken: tokenResponse.access_token,
+        refreshToken: tokenResponse.refresh_token,
+        expiresAt: Date.now() + (tokenResponse.expires_in ?? 0) * 1000,
+      };
       delete req.session.oauthState;
 
       res.redirect("/dashboard");
@@ -275,7 +351,8 @@ function createWebApp({ config, store }) {
 
   app.get("/dashboard", requireAuth, async (req, res, next) => {
     try {
-      const accessibleGuilds = normalizeGuildList(req.session.guilds ?? [], config, req.session.user);
+      const sessionGuilds = await loadSessionGuilds(req, config);
+      const accessibleGuilds = normalizeGuildList(sessionGuilds, config, req.session.user);
       const guilds = await Promise.all(
         accessibleGuilds.map(async (guild) => ({
           ...guild,
@@ -295,7 +372,8 @@ function createWebApp({ config, store }) {
 
   app.get("/guilds/:guildId", requireAuth, async (req, res, next) => {
     try {
-      const guild = (req.session.guilds ?? []).find((entry) => entry.id === req.params.guildId);
+      const sessionGuilds = await loadSessionGuilds(req, config);
+      const guild = sessionGuilds.find((entry) => entry.id === req.params.guildId);
       if (!hasGuildAccess(guild, config, req.session.user)) {
         res.status(403).send("You do not have admin access to this server.");
         return;
@@ -318,7 +396,8 @@ function createWebApp({ config, store }) {
 
   app.post("/guilds/:guildId", requireAuth, requireCsrf, async (req, res, next) => {
     try {
-      const guild = (req.session.guilds ?? []).find((entry) => entry.id === req.params.guildId);
+      const sessionGuilds = await loadSessionGuilds(req, config);
+      const guild = sessionGuilds.find((entry) => entry.id === req.params.guildId);
       if (!hasGuildAccess(guild, config, req.session.user)) {
         res.status(403).send("You do not have admin access to this server.");
         return;
@@ -341,7 +420,7 @@ function createWebApp({ config, store }) {
     res.status(500).render("home", {
       title: "MOON Control",
       loggedIn: Boolean(req.session.user),
-      error: error.message,
+      error: formatDashboardError(error),
     });
   });
 

@@ -145,9 +145,9 @@ SERVICE_MODE=all
 
 ## Notes
 
-- `Dockerfile.bot` installs `whisper.cpp` and downloads the `medium.en` model during build.
+- `Dockerfile.bot` installs `whisper.cpp` and downloads the `small.en` model during build.
 - `Dockerfile.web` stays lightweight and does not build the speech stack.
-- MOON now defaults to `medium.en` plus an English command prompt, beam search, and deterministic decoding for better command recognition.
-- This improves recognition quality, but it also makes the bot image heavier and transcription slower than `base.en`.
+- MOON now defaults to `small.en` plus an English command prompt, beam search, and deterministic decoding for better command recognition.
+- This improves recognition quality over `base.en` without the heavier memory hit of `medium.en`.
 - The dashboard uses Postgres-backed sessions when `DATABASE_URL` is set.
 - The dashboard exposes `GET /healthz` for a simple health check.
