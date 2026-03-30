@@ -4,6 +4,7 @@ const { randomUUID } = require("node:crypto");
 const { spawn } = require("node:child_process");
 const ffmpegPath = require("ffmpeg-static");
 const { config } = require("./config");
+const { isWhisperServerReady } = require("./whisperServer");
 
 function runProcess(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -63,6 +64,32 @@ async function convertPcmToWav(inputPath, outputPath) {
   ]);
 }
 
+async function transcribeViaServer(wavPath) {
+  const wavBuffer = await fs.readFile(wavPath);
+  const form = new FormData();
+  form.append("file", new Blob([wavBuffer], { type: "audio/wav" }), "command.wav");
+  form.append("model", "whisper-1");
+  form.append("language", config.WHISPER_LANGUAGE);
+  form.append("prompt", config.WHISPER_PROMPT);
+  form.append("temperature", String(config.WHISPER_TEMPERATURE));
+  form.append("response_format", "text");
+
+  const response = await fetch(config.whisperServerUrl, {
+    method: "POST",
+    body: form,
+  });
+
+  const body = await response.text();
+  if (!response.ok) {
+    throw Object.assign(new Error("Speech transcription failed."), {
+      details: body,
+      command: config.whisperServerUrl,
+    });
+  }
+
+  return body.trim();
+}
+
 async function runWhisperCpp(wavPath, outputBasePath) {
   await runProcess(config.WHISPER_CPP_PATH, [
     "-m",
@@ -101,6 +128,15 @@ async function transcribePcmBuffer(pcmBuffer) {
   try {
     await fs.writeFile(rawPath, pcmBuffer);
     await convertPcmToWav(rawPath, wavPath);
+
+    if (isWhisperServerReady()) {
+      try {
+        return await transcribeViaServer(wavPath);
+      } catch (error) {
+        console.warn("[MOON] Whisper server request failed, falling back to CLI.", error?.details ?? error);
+      }
+    }
+
     return await runWhisperCpp(wavPath, outputBasePath);
   } finally {
     await Promise.allSettled([

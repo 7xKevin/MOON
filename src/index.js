@@ -3,6 +3,7 @@ const { config } = require("./config");
 const { createBot } = require("./bot");
 const { createSettingsStore } = require("./settingsStore");
 const { createWebApp } = require("./web");
+const { startWhisperServer } = require("./whisperServer");
 
 function startBotHealthServer() {
   if (!(config.SERVICE_MODE === "bot" || config.SERVICE_MODE === "all")) {
@@ -36,6 +37,7 @@ async function main() {
 
   if (config.SERVICE_MODE === "bot" || config.SERVICE_MODE === "all") {
     runners.push(startBotHealthServer());
+    await startWhisperServer(config);
     const bot = createBot({ config, store });
     runners.push(bot.start());
   }

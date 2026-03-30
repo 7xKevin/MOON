@@ -49,6 +49,9 @@ const schema = z.object({
   CONTROLLER_USER_ID: optionalString,
   WHISPER_CPP_PATH: optionalString,
   WHISPER_MODEL_PATH: optionalString,
+  WHISPER_SERVER_PATH: optionalString,
+  WHISPER_SERVER_URL: optionalString,
+  WHISPER_SERVER_PORT: z.coerce.number().int().positive().default(8081),
   WHISPER_LANGUAGE: z.string().default("en"),
   WHISPER_PROMPT: z
     .string()
@@ -93,12 +96,14 @@ if (config.SERVICE_MODE === "web" || config.SERVICE_MODE === "all") {
 }
 
 const appBaseUrl = config.APP_BASE_URL ?? `http://localhost:${config.PORT}`;
+const whisperServerUrl = config.WHISPER_SERVER_URL ?? `http://127.0.0.1:${config.WHISPER_SERVER_PORT}/v1/audio/transcriptions`;
 
 module.exports = {
   config: {
     ...config,
     appBaseUrl,
     oauthRedirectUri: `${appBaseUrl}/auth/discord/callback`,
+    whisperServerUrl,
     isProduction: process.env.NODE_ENV === "production",
   },
 };

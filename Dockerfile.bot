@@ -18,7 +18,8 @@ COPY . .
 
 ENV WHISPER_CPP_PATH=/opt/whisper.cpp/build/bin/whisper-cli
 ENV WHISPER_MODEL_PATH=/opt/whisper.cpp/models/ggml-small.en.bin
+ENV WHISPER_SERVER_URL=http://127.0.0.1:8081/v1/audio/transcriptions
+ENV WHISPER_SERVER_PORT=8081
 ENV NODE_ENV=production
 
 CMD ["npm", "run", "start:bot"]
-
