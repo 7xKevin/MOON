@@ -82,6 +82,38 @@
               </section>
 
               <section class="form-section">
+                <h3 class="section-title">Voice recognition</h3>
+                <div class="toggle-grid">
+                  <label class="toggle">
+                    <input type="checkbox" name="requireWakeWord" <%= settings.requireWakeWord ? "checked" : "" %> />
+                    <span class="toggle-copy">
+                      <span>Require wake word</span>
+                      <small>Only execute commands that begin with the configured wake word.</small>
+                    </span>
+                  </label>
+                </div>
+                <div class="field-grid">
+                  <label>
+                    Wake word
+                    <input type="text" name="wakeWord" value="<%= settings.wakeWord %>" />
+                    <span class="field-help">Examples: <code>moon</code>, <code>nova</code>, <code>assistant</code>.</span>
+                  </label>
+                  <label>
+                    Silence cutoff (ms)
+                    <input type="text" name="transcriptionSilenceMs" value="<%= settings.transcriptionSilenceMs %>" />
+                    <span class="field-help">How long MOON waits after silence before sending audio to Whisper.</span>
+                  </label>
+                </div>
+                <div class="field-grid">
+                  <label>
+                    Command cooldown (ms)
+                    <input type="text" name="commandCooldownMs" value="<%= settings.commandCooldownMs %>" />
+                    <span class="field-help">Minimum delay between accepted voice commands in this guild.</span>
+                  </label>
+                </div>
+              </section>
+
+              <section class="form-section">
                 <h3 class="section-title">Access</h3>
                 <div class="field-grid">
                   <label>

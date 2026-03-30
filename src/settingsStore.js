@@ -35,7 +35,12 @@ function parseStringList(value) {
   return [];
 }
 
-function normalizeGuildSettings(input = {}) {
+function normalizePositiveInteger(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizeGuildSettings(input = {}, defaults = {}) {
   return {
     guildId: String(input.guildId ?? "").trim(),
     guildName: String(input.guildName ?? "Unknown Server").trim() || "Unknown Server",
@@ -46,6 +51,19 @@ function normalizeGuildSettings(input = {}) {
     preferredTextChannelId: input.preferredTextChannelId ? String(input.preferredTextChannelId).trim() : "",
     preferredVoiceChannelId: input.preferredVoiceChannelId ? String(input.preferredVoiceChannelId).trim() : "",
     debugTranscripts: input.debugTranscripts === true,
+    wakeWord: String(input.wakeWord ?? defaults.wakeWord ?? "moon").trim() || "moon",
+    requireWakeWord:
+      input.requireWakeWord === undefined
+        ? defaults.requireWakeWord !== false
+        : input.requireWakeWord === true,
+    transcriptionSilenceMs: normalizePositiveInteger(
+      input.transcriptionSilenceMs,
+      defaults.transcriptionSilenceMs ?? 1200
+    ),
+    commandCooldownMs: normalizePositiveInteger(
+      input.commandCooldownMs,
+      defaults.commandCooldownMs ?? 2500
+    ),
     commandDragEnabled: input.commandDragEnabled !== false,
     commandMuteEnabled: input.commandMuteEnabled !== false,
     commandKickEnabled: input.commandKickEnabled !== false,
@@ -54,16 +72,22 @@ function normalizeGuildSettings(input = {}) {
   };
 }
 
-function createDefaultGuildSettings(guildId, guildName) {
+function createDefaultGuildSettings(guildId, guildName, defaults = {}) {
   return normalizeGuildSettings({
     guildId,
     guildName,
-  });
+  }, defaults);
 }
 
 class FileSettingsStore {
   constructor(config) {
     this.filePath = path.join(config.DATA_DIR, "guild-settings.json");
+    this.defaults = {
+      wakeWord: config.WAKE_WORD,
+      requireWakeWord: config.REQUIRE_WAKE_WORD,
+      transcriptionSilenceMs: config.TRANSCRIPTION_SILENCE_MS,
+      commandCooldownMs: config.COMMAND_COOLDOWN_MS,
+    };
   }
 
   async init() {
@@ -87,11 +111,14 @@ class FileSettingsStore {
 
   async getGuildSettings(guildId, guildName = "Unknown Server") {
     const all = await this.readAll();
-    return normalizeGuildSettings(all[guildId] ?? createDefaultGuildSettings(guildId, guildName));
+    return normalizeGuildSettings(
+      all[guildId] ?? createDefaultGuildSettings(guildId, guildName, this.defaults),
+      this.defaults
+    );
   }
 
   async saveGuildSettings(settings) {
-    const normalized = normalizeGuildSettings(settings);
+    const normalized = normalizeGuildSettings(settings, this.defaults);
     const all = await this.readAll();
     all[normalized.guildId] = normalized;
     await this.writeAll(all);
@@ -105,6 +132,12 @@ class PostgresSettingsStore {
       connectionString: config.DATABASE_URL,
       ssl: config.isProduction ? { rejectUnauthorized: false } : false,
     });
+    this.defaults = {
+      wakeWord: config.WAKE_WORD,
+      requireWakeWord: config.REQUIRE_WAKE_WORD,
+      transcriptionSilenceMs: config.TRANSCRIPTION_SILENCE_MS,
+      commandCooldownMs: config.COMMAND_COOLDOWN_MS,
+    };
   }
 
   async init() {
@@ -119,12 +152,24 @@ class PostgresSettingsStore {
         preferred_text_channel_id TEXT,
         preferred_voice_channel_id TEXT,
         debug_transcripts BOOLEAN NOT NULL DEFAULT FALSE,
+        wake_word TEXT NOT NULL DEFAULT 'moon',
+        require_wake_word BOOLEAN NOT NULL DEFAULT TRUE,
+        transcription_silence_ms INTEGER NOT NULL DEFAULT 1200,
+        command_cooldown_ms INTEGER NOT NULL DEFAULT 2500,
         command_drag_enabled BOOLEAN NOT NULL DEFAULT TRUE,
         command_mute_enabled BOOLEAN NOT NULL DEFAULT TRUE,
         command_kick_enabled BOOLEAN NOT NULL DEFAULT TRUE,
         command_lock_enabled BOOLEAN NOT NULL DEFAULT TRUE,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
+    `);
+
+    await this.pool.query(`
+      ALTER TABLE guild_settings
+      ADD COLUMN IF NOT EXISTS wake_word TEXT NOT NULL DEFAULT 'moon',
+      ADD COLUMN IF NOT EXISTS require_wake_word BOOLEAN NOT NULL DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS transcription_silence_ms INTEGER NOT NULL DEFAULT 1200,
+      ADD COLUMN IF NOT EXISTS command_cooldown_ms INTEGER NOT NULL DEFAULT 2500
     `);
   }
 
@@ -135,7 +180,7 @@ class PostgresSettingsStore {
     );
 
     if (!result.rowCount) {
-      return createDefaultGuildSettings(guildId, guildName);
+      return createDefaultGuildSettings(guildId, guildName, this.defaults);
     }
 
     const row = result.rows[0];
@@ -149,16 +194,20 @@ class PostgresSettingsStore {
       preferredTextChannelId: row.preferred_text_channel_id,
       preferredVoiceChannelId: row.preferred_voice_channel_id,
       debugTranscripts: row.debug_transcripts,
+      wakeWord: row.wake_word,
+      requireWakeWord: row.require_wake_word,
+      transcriptionSilenceMs: row.transcription_silence_ms,
+      commandCooldownMs: row.command_cooldown_ms,
       commandDragEnabled: row.command_drag_enabled,
       commandMuteEnabled: row.command_mute_enabled,
       commandKickEnabled: row.command_kick_enabled,
       commandLockEnabled: row.command_lock_enabled,
       updatedAt: row.updated_at,
-    });
+    }, this.defaults);
   }
 
   async saveGuildSettings(settings) {
-    const normalized = normalizeGuildSettings(settings);
+    const normalized = normalizeGuildSettings(settings, this.defaults);
 
     await this.pool.query(
       `
@@ -172,6 +221,10 @@ class PostgresSettingsStore {
           preferred_text_channel_id,
           preferred_voice_channel_id,
           debug_transcripts,
+          wake_word,
+          require_wake_word,
+          transcription_silence_ms,
+          command_cooldown_ms,
           command_drag_enabled,
           command_mute_enabled,
           command_kick_enabled,
@@ -179,7 +232,7 @@ class PostgresSettingsStore {
           updated_at
         )
         VALUES (
-          $1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, NOW()
+          $1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW()
         )
         ON CONFLICT (guild_id)
         DO UPDATE SET
@@ -191,6 +244,10 @@ class PostgresSettingsStore {
           preferred_text_channel_id = EXCLUDED.preferred_text_channel_id,
           preferred_voice_channel_id = EXCLUDED.preferred_voice_channel_id,
           debug_transcripts = EXCLUDED.debug_transcripts,
+          wake_word = EXCLUDED.wake_word,
+          require_wake_word = EXCLUDED.require_wake_word,
+          transcription_silence_ms = EXCLUDED.transcription_silence_ms,
+          command_cooldown_ms = EXCLUDED.command_cooldown_ms,
           command_drag_enabled = EXCLUDED.command_drag_enabled,
           command_mute_enabled = EXCLUDED.command_mute_enabled,
           command_kick_enabled = EXCLUDED.command_kick_enabled,
@@ -207,6 +264,10 @@ class PostgresSettingsStore {
         normalized.preferredTextChannelId || null,
         normalized.preferredVoiceChannelId || null,
         normalized.debugTranscripts,
+        normalized.wakeWord,
+        normalized.requireWakeWord,
+        normalized.transcriptionSilenceMs,
+        normalized.commandCooldownMs,
         normalized.commandDragEnabled,
         normalized.commandMuteEnabled,
         normalized.commandKickEnabled,

@@ -122,7 +122,7 @@ function requireCsrf(req, res, next) {
   next();
 }
 
-function mapGuildForm(req) {
+function mapGuildForm(req, config) {
   return normalizeGuildSettings({
     guildId: req.params.guildId,
     guildName: req.body.guildName,
@@ -133,10 +133,19 @@ function mapGuildForm(req) {
     preferredTextChannelId: req.body.preferredTextChannelId,
     preferredVoiceChannelId: req.body.preferredVoiceChannelId,
     debugTranscripts: parseBoolean(req.body.debugTranscripts),
+    wakeWord: req.body.wakeWord,
+    requireWakeWord: parseBoolean(req.body.requireWakeWord),
+    transcriptionSilenceMs: req.body.transcriptionSilenceMs,
+    commandCooldownMs: req.body.commandCooldownMs,
     commandDragEnabled: parseBoolean(req.body.commandDragEnabled),
     commandMuteEnabled: parseBoolean(req.body.commandMuteEnabled),
     commandKickEnabled: parseBoolean(req.body.commandKickEnabled),
     commandLockEnabled: parseBoolean(req.body.commandLockEnabled),
+  }, {
+    wakeWord: config.WAKE_WORD,
+    requireWakeWord: config.REQUIRE_WAKE_WORD,
+    transcriptionSilenceMs: config.TRANSCRIPTION_SILENCE_MS,
+    commandCooldownMs: config.COMMAND_COOLDOWN_MS,
   });
 }
 
@@ -297,7 +306,7 @@ function createWebApp({ config, store }) {
         return;
       }
 
-      const nextSettings = mapGuildForm(req);
+      const nextSettings = mapGuildForm(req, config);
       nextSettings.guildName = guild.name;
       await store.saveGuildSettings(nextSettings);
 

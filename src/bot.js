@@ -65,12 +65,12 @@ function createBot({ config, store }) {
     await sendStatusToChannel(guild, session.textChannelId, content);
   }
 
-  async function collectPcmBuffer(receiver, userId) {
+  async function collectPcmBuffer(receiver, userId, silenceDurationMs) {
     return new Promise((resolve, reject) => {
       const opusStream = receiver.subscribe(userId, {
         end: {
           behavior: EndBehaviorType.AfterSilence,
-          duration: config.TRANSCRIPTION_SILENCE_MS,
+          duration: silenceDurationMs,
         },
       });
 
@@ -303,6 +303,20 @@ function createBot({ config, store }) {
     }
   }
 
+  function getRuntimeVoiceSettings(guildSettings) {
+    return {
+      wakeWord: guildSettings.wakeWord || config.WAKE_WORD,
+      requireWakeWord:
+        guildSettings.requireWakeWord === undefined
+          ? config.REQUIRE_WAKE_WORD
+          : guildSettings.requireWakeWord,
+      transcriptionSilenceMs:
+        guildSettings.transcriptionSilenceMs || config.TRANSCRIPTION_SILENCE_MS,
+      commandCooldownMs:
+        guildSettings.commandCooldownMs || config.COMMAND_COOLDOWN_MS,
+    };
+  }
+
   async function handleSpeech(guild, userId) {
     const session = getSession(guild.id);
     if (!session || session.isProcessing) {
@@ -328,15 +342,21 @@ function createBot({ config, store }) {
       return;
     }
 
+    const runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings);
+
     const now = Date.now();
-    if (now - session.lastCommandAt < config.COMMAND_COOLDOWN_MS) {
+    if (now - session.lastCommandAt < runtimeVoiceSettings.commandCooldownMs) {
       return;
     }
 
     session.isProcessing = true;
 
     try {
-      const pcmBuffer = await collectPcmBuffer(session.receiver, userId);
+      const pcmBuffer = await collectPcmBuffer(
+        session.receiver,
+        userId,
+        runtimeVoiceSettings.transcriptionSilenceMs
+      );
       if (!pcmBuffer.length) {
         return;
       }
@@ -351,8 +371,8 @@ function createBot({ config, store }) {
       }
 
       const command = parseVoiceCommand(transcript, {
-        wakeWord: config.WAKE_WORD,
-        requireWakeWord: config.REQUIRE_WAKE_WORD,
+        wakeWord: runtimeVoiceSettings.wakeWord,
+        requireWakeWord: runtimeVoiceSettings.requireWakeWord,
       });
       if (!command) {
         log(`Ignored transcript from ${speaker.user.tag}: ${transcript}`);
@@ -419,8 +439,11 @@ function createBot({ config, store }) {
     return session;
   }
 
-  function getHelpText() {
-    const wakePrefix = config.REQUIRE_WAKE_WORD ? `${config.WAKE_WORD} ` : "";
+  function getHelpText(guildSettings) {
+    const runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings);
+    const wakePrefix = runtimeVoiceSettings.requireWakeWord
+      ? `${runtimeVoiceSettings.wakeWord} `
+      : "";
 
     return [
       "**MOON commands**",
@@ -430,8 +453,8 @@ function createBot({ config, store }) {
       `\`${config.PREFIX}help\` - show this help`,
       "",
       "**Voice commands**",
-      config.REQUIRE_WAKE_WORD
-        ? `Say the wake word first, for example \`${config.WAKE_WORD}, lock the vc\``
+      runtimeVoiceSettings.requireWakeWord
+        ? `Say the wake word first, for example \`${runtimeVoiceSettings.wakeWord}, lock the vc\``
         : "Speak the command phrase directly.",
       `\`${wakePrefix}drag <name> here\``,
       `\`${wakePrefix}mute <name>\``,
@@ -462,7 +485,7 @@ function createBot({ config, store }) {
       const guildSettings = await getGuildSettings(message.guild);
 
       if (commandName === "help") {
-        await message.reply(getHelpText());
+        await message.reply(getHelpText(guildSettings));
         return;
       }
 
