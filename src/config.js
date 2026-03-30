@@ -50,6 +50,12 @@ const schema = z.object({
   WHISPER_CPP_PATH: optionalString,
   WHISPER_MODEL_PATH: optionalString,
   WHISPER_LANGUAGE: z.string().default("en"),
+  WHISPER_PROMPT: z
+    .string()
+    .default("Discord voice commands like lock, unlock, mute, unmute, kick, and drag users here."),
+  WHISPER_BEAM_SIZE: z.coerce.number().int().positive().default(5),
+  WHISPER_BEST_OF: z.coerce.number().int().positive().default(5),
+  WHISPER_TEMPERATURE: z.coerce.number().min(0).max(1).default(0),
   TEMP_DIR: z.string().default(path.join(process.cwd(), "tmp")),
   TRANSCRIPTION_SILENCE_MS: z.coerce.number().int().positive().default(1200),
   COMMAND_COOLDOWN_MS: z.coerce.number().int().nonnegative().default(2500),

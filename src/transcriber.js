@@ -49,10 +49,14 @@ async function convertPcmToWav(inputPath, outputPath) {
     "2",
     "-i",
     inputPath,
+    "-af",
+    "loudnorm=I=-16:LRA=11:TP=-1.5",
     "-ar",
     "16000",
     "-ac",
     "1",
+    "-c:a",
+    "pcm_s16le",
     "-y",
     outputPath,
   ]);
@@ -66,6 +70,14 @@ async function runWhisperCpp(wavPath, outputBasePath) {
     wavPath,
     "-l",
     config.WHISPER_LANGUAGE,
+    "-bs",
+    String(config.WHISPER_BEAM_SIZE),
+    "-bo",
+    String(config.WHISPER_BEST_OF),
+    "-tp",
+    String(config.WHISPER_TEMPERATURE),
+    "--prompt",
+    config.WHISPER_PROMPT,
     "-nt",
     "-otxt",
     "-of",
@@ -106,3 +118,4 @@ async function transcribePcmBuffer(pcmBuffer) {
 module.exports = {
   transcribePcmBuffer,
 };
+

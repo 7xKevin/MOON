@@ -77,6 +77,9 @@ Key variables:
 - `DATABASE_URL` for shared Postgres on Render
 - `WHISPER_CPP_PATH` for bot mode
 - `WHISPER_MODEL_PATH` for bot mode
+- `WHISPER_LANGUAGE` defaults to `en`
+- `WHISPER_PROMPT` seeds Whisper with Discord command context
+- `WHISPER_BEAM_SIZE`, `WHISPER_BEST_OF`, and `WHISPER_TEMPERATURE` tune decoding
 
 For Render:
 
@@ -142,9 +145,9 @@ SERVICE_MODE=all
 
 ## Notes
 
-- `Dockerfile.bot` installs `whisper.cpp` and downloads the `base.en` model during build.
+- `Dockerfile.bot` installs `whisper.cpp` and downloads the `medium.en` model during build.
 - `Dockerfile.web` stays lightweight and does not build the speech stack.
-- I am inferring that `base.en` is the best default starting point because it balances speed and accuracy for a hosted bot.
-- If you want better accuracy and can afford higher CPU use, move up to a larger model later.
+- MOON now defaults to `medium.en` plus an English command prompt, beam search, and deterministic decoding for better command recognition.
+- This improves recognition quality, but it also makes the bot image heavier and transcription slower than `base.en`.
 - The dashboard uses Postgres-backed sessions when `DATABASE_URL` is set.
 - The dashboard exposes `GET /healthz` for a simple health check.
