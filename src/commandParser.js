@@ -6,39 +6,96 @@ function normalizeText(input) {
     .trim();
 }
 
-function parseVoiceCommand(transcript) {
+function stripWakeWordPrefix(normalized, wakeWord, requireWakeWord) {
+  const normalizedWakeWord = normalizeText(wakeWord);
+
+  if (!normalizedWakeWord) {
+    return normalized;
+  }
+
+  const acceptedPrefixes = [
+    `${normalizedWakeWord} `,
+    `hey ${normalizedWakeWord} `,
+    `ok ${normalizedWakeWord} `,
+    `okay ${normalizedWakeWord} `,
+  ];
+
+  if (normalized === normalizedWakeWord) {
+    return "";
+  }
+
+  for (const prefix of acceptedPrefixes) {
+    if (normalized.startsWith(prefix)) {
+      return normalized.slice(prefix.length).trim();
+    }
+  }
+
+  return requireWakeWord ? null : normalized;
+}
+
+function parseVoiceCommand(transcript, options = {}) {
   const normalized = normalizeText(transcript);
 
   if (!normalized) {
     return null;
   }
 
-  const dragMatch = normalized.match(/^(drag|move)\s+(.+?)\s+here$/);
+  const commandText = stripWakeWordPrefix(
+    normalized,
+    options.wakeWord ?? "moon",
+    options.requireWakeWord ?? true
+  );
+
+  if (!commandText) {
+    return null;
+  }
+
+  const dragMatch = commandText.match(/^(drag|move)\s+(.+?)\s+here$/);
   if (dragMatch) {
-    return { type: "drag", targetName: dragMatch[2], transcript: normalized };
+    return {
+      type: "drag",
+      targetName: dragMatch[2],
+      transcript: commandText,
+      rawTranscript: normalized,
+    };
   }
 
-  const muteMatch = normalized.match(/^mute\s+(.+)$/);
+  const muteMatch = commandText.match(/^mute\s+(.+)$/);
   if (muteMatch) {
-    return { type: "mute", targetName: muteMatch[1], transcript: normalized };
+    return {
+      type: "mute",
+      targetName: muteMatch[1],
+      transcript: commandText,
+      rawTranscript: normalized,
+    };
   }
 
-  const unmuteMatch = normalized.match(/^unmute\s+(.+)$/);
+  const unmuteMatch = commandText.match(/^unmute\s+(.+)$/);
   if (unmuteMatch) {
-    return { type: "unmute", targetName: unmuteMatch[1], transcript: normalized };
+    return {
+      type: "unmute",
+      targetName: unmuteMatch[1],
+      transcript: commandText,
+      rawTranscript: normalized,
+    };
   }
 
-  const kickMatch = normalized.match(/^(kick|disconnect)\s+(.+)$/);
+  const kickMatch = commandText.match(/^(kick|disconnect)\s+(.+)$/);
   if (kickMatch) {
-    return { type: "kick", targetName: kickMatch[2], transcript: normalized };
+    return {
+      type: "kick",
+      targetName: kickMatch[2],
+      transcript: commandText,
+      rawTranscript: normalized,
+    };
   }
 
-  if (/^lock(?:\s+the)?\s+(vc|voice channel)$/.test(normalized)) {
-    return { type: "lock", transcript: normalized };
+  if (/^lock(?:\s+the)?\s+(vc|voice channel)$/.test(commandText)) {
+    return { type: "lock", transcript: commandText, rawTranscript: normalized };
   }
 
-  if (/^unlock(?:\s+the)?\s+(vc|voice channel)$/.test(normalized)) {
-    return { type: "unlock", transcript: normalized };
+  if (/^unlock(?:\s+the)?\s+(vc|voice channel)$/.test(commandText)) {
+    return { type: "unlock", transcript: commandText, rawTranscript: normalized };
   }
 
   return null;
@@ -47,4 +104,5 @@ function parseVoiceCommand(transcript) {
 module.exports = {
   normalizeText,
   parseVoiceCommand,
+  stripWakeWordPrefix,
 };

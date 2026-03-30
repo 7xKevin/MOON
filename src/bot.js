@@ -350,7 +350,10 @@ function createBot({ config, store }) {
         await sendStatus(guild, `Transcript from **${speaker.displayName}**: \`${transcript}\``);
       }
 
-      const command = parseVoiceCommand(transcript);
+      const command = parseVoiceCommand(transcript, {
+        wakeWord: config.WAKE_WORD,
+        requireWakeWord: config.REQUIRE_WAKE_WORD,
+      });
       if (!command) {
         log(`Ignored transcript from ${speaker.user.tag}: ${transcript}`);
         return;
@@ -417,6 +420,8 @@ function createBot({ config, store }) {
   }
 
   function getHelpText() {
+    const wakePrefix = config.REQUIRE_WAKE_WORD ? `${config.WAKE_WORD} ` : "";
+
     return [
       "**MOON commands**",
       `\`${config.PREFIX}join\` - join your current voice channel and listen for voice commands`,
@@ -425,12 +430,15 @@ function createBot({ config, store }) {
       `\`${config.PREFIX}help\` - show this help`,
       "",
       "**Voice commands**",
-      "`drag <name> here`",
-      "`mute <name>`",
-      "`unmute <name>`",
-      "`kick <name>`",
-      "`lock the vc`",
-      "`unlock the vc`",
+      config.REQUIRE_WAKE_WORD
+        ? `Say the wake word first, for example \`${config.WAKE_WORD}, lock the vc\``
+        : "Speak the command phrase directly.",
+      `\`${wakePrefix}drag <name> here\``,
+      `\`${wakePrefix}mute <name>\``,
+      `\`${wakePrefix}unmute <name>\``,
+      `\`${wakePrefix}kick <name>\``,
+      `\`${wakePrefix}lock the vc\``,
+      `\`${wakePrefix}unlock the vc\``,
     ].join("\n");
   }
 

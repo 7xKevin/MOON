@@ -68,6 +68,8 @@ Key variables:
 
 - `SERVICE_MODE=bot|web|all`
 - `HOST` defaults to `::` for Railway-compatible binding
+- `WAKE_WORD` defaults to `moon`
+- `REQUIRE_WAKE_WORD=true` makes commands require phrases like `moon lock the vc`
 - `DISCORD_TOKEN` for bot mode
 - `DISCORD_CLIENT_ID` for dashboard mode
 - `DISCORD_CLIENT_SECRET` for dashboard mode

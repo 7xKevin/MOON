@@ -36,6 +36,8 @@ const schema = z.object({
   HOST: z.string().default("::"),
   PORT: z.coerce.number().int().positive().default(3000),
   PREFIX: z.string().default("!"),
+  WAKE_WORD: z.string().default("moon"),
+  REQUIRE_WAKE_WORD: booleanFromEnv.default(true),
   DISCORD_TOKEN: optionalString,
   DISCORD_CLIENT_ID: optionalString,
   DISCORD_CLIENT_SECRET: optionalString,
