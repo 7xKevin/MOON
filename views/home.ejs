@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="/static/theme.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar">
+        <a class="brand" href="/">
+          <span class="brand-mark">M</span>
+          <span class="brand-copy">
+            <strong>MOON Control</strong>
+            <span>Admin console</span>
+          </span>
+        </a>
+
+        <div class="sidebar-section">
+          <p class="sidebar-label">Overview</p>
+          <nav class="sidebar-nav">
+            <a class="nav-item active" href="/">Home</a>
+            <% if (currentUser) { %>
+              <a class="nav-item" href="/dashboard">Dashboard</a>
+            <% } %>
+            <% if (botInviteUrl) { %>
+              <a class="nav-item" href="<%= botInviteUrl %>" target="_blank" rel="noreferrer">Invite Bot</a>
+            <% } %>
+          </nav>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <h1 class="page-title">Control panel</h1>
+            <div class="meta">Manage who can use MOON and what it can do.</div>
+          </div>
+          <div class="actions">
+            <button class="theme-toggle" type="button" data-theme-toggle>
+              Theme: <span data-theme-label>Light</span>
+            </button>
+            <% if (currentUser) { %>
+              <a class="button" href="/dashboard">Dashboard</a>
+              <a class="button primary" href="/logout">Log Out</a>
+            <% } else { %>
+              <a class="button primary" href="/login">Log In With Discord</a>
+            <% } %>
+          </div>
+        </header>
+
+        <% if (typeof error !== "undefined" && error) { %>
+          <div class="notice error"><%= error %></div>
+        <% } %>
+
+        <section class="hero">
+          <article class="card">
+            <div class="card-body">
+              <span class="eyebrow">MOON Dashboard</span>
+              <h2 class="headline">Simple controls for a voice bot that can do real damage.</h2>
+              <p class="section-lead">
+                Keep the bot usable without letting the server turn into chaos. Admins can choose who
+                gets voice-command access and disable sensitive actions like <code>kick</code> or
+                <code>lock</code> per server.
+              </p>
+              <div class="inline-actions">
+                <% if (loggedIn) { %>
+                  <a class="button primary" href="/dashboard">Open Dashboard</a>
+                <% } else { %>
+                  <a class="button primary" href="/login">Connect Discord</a>
+                <% } %>
+                <% if (botInviteUrl) { %>
+                  <a class="button" href="<%= botInviteUrl %>" target="_blank" rel="noreferrer">Invite MOON</a>
+                <% } %>
+              </div>
+            </div>
+          </article>
+
+          <aside class="card">
+            <div class="card-body stack">
+              <div>
+                <h2 class="section-title">What it handles</h2>
+                <p class="section-lead">Minimal dashboard, shared rules, and live bot controls.</p>
+              </div>
+              <div class="quick-grid">
+                <div class="quick-item">
+                  <strong>Access</strong>
+                  <span class="muted">Allow by user ID or role ID.</span>
+                </div>
+                <div class="quick-item">
+                  <strong>Safety</strong>
+                  <span class="muted">Toggle drag, mute, kick, and lock.</span>
+                </div>
+                <div class="quick-item">
+                  <strong>Status</strong>
+                  <span class="muted">Pause the bot per guild.</span>
+                </div>
+                <div class="quick-item">
+                  <strong>Deploy</strong>
+                  <span class="muted">Works as Render web + worker.</span>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </section>
+
+        <p class="footer-note">No gradients. No giant curves. Just a dashboard that stays out of the way.</p>
+      </main>
+    </div>
+  </body>
+</html>

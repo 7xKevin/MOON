@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="/static/theme.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar">
+        <a class="brand" href="/dashboard">
+          <span class="brand-mark">M</span>
+          <span class="brand-copy">
+            <strong>MOON Control</strong>
+            <span><%= guild.name %></span>
+          </span>
+        </a>
+
+        <div class="sidebar-section">
+          <p class="sidebar-label">Navigation</p>
+          <nav class="sidebar-nav">
+            <a class="nav-item" href="/dashboard">Back to servers</a>
+            <a class="nav-item active" href="/guilds/<%= guild.id %>">Guild settings</a>
+            <a class="nav-item" href="/logout">Log Out</a>
+          </nav>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <h1 class="page-title"><%= guild.name %></h1>
+            <div class="meta">Guild ID: <code><%= guild.id %></code></div>
+          </div>
+          <div class="actions">
+            <button class="theme-toggle" type="button" data-theme-toggle>
+              Theme: <span data-theme-label>Light</span>
+            </button>
+            <a class="button" href="/dashboard">Back</a>
+            <a class="button primary" href="/logout">Log Out</a>
+          </div>
+        </header>
+
+        <% if (saved) { %>
+          <div class="notice">Settings saved.</div>
+        <% } %>
+
+        <section class="card">
+          <div class="card-body form-shell">
+            <div>
+              <span class="eyebrow">Guild configuration</span>
+              <h2 class="section-title" style="margin-top: 10px;">Define exactly who MOON listens to.</h2>
+              <p class="section-lead">
+                The session starter always keeps control. Discord admins keep access too. Everything else here is optional.
+              </p>
+            </div>
+
+            <form method="post" action="/guilds/<%= guild.id %>" class="form-shell">
+              <input type="hidden" name="guildName" value="<%= guild.name %>" />
+              <input type="hidden" name="csrfToken" value="<%= csrfToken %>" />
+
+              <section class="form-section">
+                <h3 class="section-title">Bot state</h3>
+                <div class="toggle-grid">
+                  <label class="toggle">
+                    <input type="checkbox" name="botEnabled" <%= settings.botEnabled ? "checked" : "" %> />
+                    <span class="toggle-copy">
+                      <span>Enable MOON in this guild</span>
+                      <small>Turns command handling on or off for the whole server.</small>
+                    </span>
+                  </label>
+                  <label class="toggle">
+                    <input type="checkbox" name="debugTranscripts" <%= settings.debugTranscripts ? "checked" : "" %> />
+                    <span class="toggle-copy">
+                      <span>Show transcripts in status posts</span>
+                      <small>Useful for debugging; noisy for normal use.</small>
+                    </span>
+                  </label>
+                </div>
+              </section>
+
+              <section class="form-section">
+                <h3 class="section-title">Access</h3>
+                <div class="field-grid">
+                  <label>
+                    Admin user IDs
+                    <textarea name="adminUserIds"><%= settings.adminUserIds.join('\n') %></textarea>
+                    <span class="field-help">One Discord user ID per line. These users can start or stop MOON.</span>
+                  </label>
+                  <label>
+                    Voice command user IDs
+                    <textarea name="commandUserIds"><%= settings.commandUserIds.join('\n') %></textarea>
+                    <span class="field-help">Users allowed to speak commands while in the same voice channel.</span>
+                  </label>
+                </div>
+                <div class="field-grid">
+                  <label>
+                    Voice command role IDs
+                    <textarea name="allowedRoleIds"><%= settings.allowedRoleIds.join('\n') %></textarea>
+                    <span class="field-help">Anyone with one of these roles can issue voice commands.</span>
+                  </label>
+                  <label>
+                    Preferred text channel ID
+                    <input type="text" name="preferredTextChannelId" value="<%= settings.preferredTextChannelId %>" />
+                    <span class="field-help">Status messages go here if set.</span>
+                  </label>
+                </div>
+                <div class="field-grid">
+                  <label>
+                    Preferred voice channel ID
+                    <input type="text" name="preferredVoiceChannelId" value="<%= settings.preferredVoiceChannelId %>" />
+                    <span class="field-help">Reserved for future auto-join behavior.</span>
+                  </label>
+                </div>
+              </section>
+
+              <section class="form-section">
+                <h3 class="section-title">Allowed actions</h3>
+                <div class="toggle-grid">
+                  <label class="toggle">
+                    <input type="checkbox" name="commandDragEnabled" <%= settings.commandDragEnabled ? "checked" : "" %> />
+                    <span class="toggle-copy">
+                      <span>Drag / move</span>
+                      <small>Move users between voice channels.</small>
+                    </span>
+                  </label>
+                  <label class="toggle">
+                    <input type="checkbox" name="commandMuteEnabled" <%= settings.commandMuteEnabled ? "checked" : "" %> />
+                    <span class="toggle-copy">
+                      <span>Mute / unmute</span>
+                      <small>Server mute voice users.</small>
+                    </span>
+                  </label>
+                  <label class="toggle">
+                    <input type="checkbox" name="commandKickEnabled" <%= settings.commandKickEnabled ? "checked" : "" %> />
+                    <span class="toggle-copy">
+                      <span>Kick / disconnect</span>
+                      <small>Remove users from voice chat.</small>
+                    </span>
+                  </label>
+                  <label class="toggle">
+                    <input type="checkbox" name="commandLockEnabled" <%= settings.commandLockEnabled ? "checked" : "" %> />
+                    <span class="toggle-copy">
+                      <span>Lock / unlock</span>
+                      <small>Change VC join permissions.</small>
+                    </span>
+                  </label>
+                </div>
+              </section>
+
+              <div class="inline-actions">
+                <button class="primary" type="submit">Save Settings</button>
+                <% if (botInviteUrl) { %>
+                  <a class="button" href="<%= botInviteUrl %>" target="_blank" rel="noreferrer">Invite MOON</a>
+                <% } %>
+              </div>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

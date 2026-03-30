@@ -1,0 +1,57 @@
+services:
+  - name: moon-web
+    type: web
+    runtime: docker
+    plan: starter
+    region: oregon
+    healthCheckPath: /healthz
+    dockerfilePath: ./Dockerfile.web
+    dockerContext: .
+    dockerCommand: npm run start:web
+    envVars:
+      - key: SERVICE_MODE
+        value: web
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: APP_BASE_URL
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: moon-db
+          property: connectionString
+  - name: moon-bot
+    type: worker
+    runtime: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile.bot
+    dockerContext: .
+    dockerCommand: npm run start:bot
+    envVars:
+      - key: SERVICE_MODE
+        value: bot
+      - key: NODE_ENV
+        value: production
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: moon-db
+          property: connectionString
+
+databases:
+  - name: moon-db
+    plan: basic-256mb
+    region: oregon
+    databaseName: moon
+    postgresMajorVersion: "17"
