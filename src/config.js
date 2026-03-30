@@ -33,6 +33,7 @@ const optionalCsv = z.preprocess((value) => {
 
 const schema = z.object({
   SERVICE_MODE: z.enum(["bot", "web", "all"]).default("bot"),
+  HOST: z.string().default("::"),
   PORT: z.coerce.number().int().positive().default(3000),
   PREFIX: z.string().default("!"),
   DISCORD_TOKEN: optionalString,

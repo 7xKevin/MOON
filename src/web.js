@@ -320,8 +320,8 @@ function createWebApp({ config, store }) {
   return {
     async start() {
       return new Promise((resolve) => {
-        const server = app.listen(config.PORT, () => {
-          console.log(`[MOON] Dashboard listening on port ${config.PORT}`);
+        const server = app.listen(config.PORT, config.HOST, () => {
+          console.log(`[MOON] Dashboard listening on ${config.HOST}:${config.PORT}`);
           resolve(server);
         });
       });

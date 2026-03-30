@@ -67,6 +67,7 @@ Copy `.env.example` to `.env`.
 Key variables:
 
 - `SERVICE_MODE=bot|web|all`
+- `HOST` defaults to `::` for Railway-compatible binding
 - `DISCORD_TOKEN` for bot mode
 - `DISCORD_CLIENT_ID` for dashboard mode
 - `DISCORD_CLIENT_SECRET` for dashboard mode
