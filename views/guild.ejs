@@ -77,10 +77,17 @@
                     </span>
                   </label>
                   <label class="toggle">
+                    <input type="checkbox" name="transcriptionEnabled" <%= settings.transcriptionEnabled ? "checked" : "" %> />
+                    <span class="toggle-copy">
+                      <span>Enable voice decoding</span>
+                      <small>When off, MOON stays in voice but ignores speech entirely.</small>
+                    </span>
+                  </label>
+                  <label class="toggle">
                     <input type="checkbox" name="debugTranscripts" <%= settings.debugTranscripts ? "checked" : "" %> />
                     <span class="toggle-copy">
-                      <span>Show transcripts in status posts</span>
-                      <small>Useful for debugging; noisy for normal use.</small>
+                      <span>Show transcript debug posts</span>
+                      <small>Only post recognized command transcripts. Keep this off during normal use.</small>
                     </span>
                   </label>
                 </div>
@@ -202,3 +209,4 @@
     </div>
   </body>
 </html>
+

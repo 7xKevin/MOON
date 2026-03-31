@@ -7,7 +7,7 @@ const {
   joinVoiceChannel,
 } = require("@discordjs/voice");
 const prism = require("prism-media");
-const { parseVoiceCommand, similarityScore } = require("./commandParser");
+const { normalizeText, parseVoiceCommand, similarityScore } = require("./commandParser");
 const { transcribePcmBuffer } = require("./transcriber");
 
 function createBot({ config, store }) {
@@ -287,6 +287,26 @@ function createBot({ config, store }) {
     return guildSettings.allowedRoleIds.some((roleId) => member.roles.cache.has(roleId));
   }
 
+  function isIgnorableTranscript(transcript) {
+    const normalized = normalizeText(transcript);
+
+    if (!normalized) {
+      return true;
+    }
+
+    const noiseOnlyPatterns = [
+      "blank audio",
+      "beep",
+      "explosion",
+      "gunshot",
+      "music",
+      "applause",
+      "laughter",
+    ];
+
+    return noiseOnlyPatterns.some((pattern) => normalized === pattern || normalized.includes(pattern));
+  }
+
   function getCommandConfidenceFloor(commandType) {
     if (commandType === "kick" || commandType === "drag") {
       return 0.82;
@@ -452,6 +472,8 @@ function createBot({ config, store }) {
         guildSettings.transcriptionSilenceMs || config.TRANSCRIPTION_SILENCE_MS,
       commandCooldownMs:
         guildSettings.commandCooldownMs || config.COMMAND_COOLDOWN_MS,
+      transcriptionEnabled:
+        guildSettings.transcriptionEnabled === undefined ? true : guildSettings.transcriptionEnabled,
     };
   }
 
@@ -481,6 +503,10 @@ function createBot({ config, store }) {
     }
 
     const runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings);
+    if (!runtimeVoiceSettings.transcriptionEnabled) {
+      return;
+    }
+
     const now = Date.now();
     if (now - session.lastCommandAt < runtimeVoiceSettings.commandCooldownMs) {
       return;
@@ -496,12 +522,8 @@ function createBot({ config, store }) {
     }
 
     const transcript = await transcribePcmBuffer(pcmBuffer);
-    if (!transcript) {
+    if (!transcript || isIgnorableTranscript(transcript)) {
       return;
-    }
-
-    if (config.DEBUG_TRANSCRIPTS || guildSettings.debugTranscripts) {
-      await sendStatus(guild, `Transcript from **${speaker.displayName}**: \`${transcript}\``);
     }
 
     const command = parseVoiceCommand(transcript, {
@@ -511,6 +533,10 @@ function createBot({ config, store }) {
     if (!command) {
       log(`Ignored transcript from ${speaker.user.tag}: ${transcript}`);
       return;
+    }
+
+    if (config.DEBUG_TRANSCRIPTS || guildSettings.debugTranscripts) {
+      await sendStatus(guild, `Transcript from **${speaker.displayName}**: \`${transcript}\``);
     }
 
     session.lastCommandAt = Date.now();
@@ -793,3 +819,6 @@ function createBot({ config, store }) {
 module.exports = {
   createBot,
 };
+
+
+

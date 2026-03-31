@@ -53,6 +53,7 @@ function normalizeGuildSettings(input = {}, defaults = {}) {
     botPresent: input.botPresent === true,
     botLastSeenAt: input.botLastSeenAt ? new Date(input.botLastSeenAt).toISOString() : null,
     debugTranscripts: input.debugTranscripts === true,
+    transcriptionEnabled: input.transcriptionEnabled !== false,
     wakeWord: String(input.wakeWord ?? defaults.wakeWord ?? "moon").trim() || "moon",
     requireWakeWord:
       input.requireWakeWord === undefined
@@ -183,6 +184,7 @@ class PostgresSettingsStore {
         bot_present BOOLEAN NOT NULL DEFAULT FALSE,
         bot_last_seen_at TIMESTAMPTZ,
         debug_transcripts BOOLEAN NOT NULL DEFAULT FALSE,
+        transcription_enabled BOOLEAN NOT NULL DEFAULT TRUE,
         wake_word TEXT NOT NULL DEFAULT 'moon',
         require_wake_word BOOLEAN NOT NULL DEFAULT TRUE,
         transcription_silence_ms INTEGER NOT NULL DEFAULT 1200,
@@ -202,7 +204,8 @@ class PostgresSettingsStore {
       ADD COLUMN IF NOT EXISTS wake_word TEXT NOT NULL DEFAULT 'moon',
       ADD COLUMN IF NOT EXISTS require_wake_word BOOLEAN NOT NULL DEFAULT TRUE,
       ADD COLUMN IF NOT EXISTS transcription_silence_ms INTEGER NOT NULL DEFAULT 1200,
-      ADD COLUMN IF NOT EXISTS command_cooldown_ms INTEGER NOT NULL DEFAULT 2500
+      ADD COLUMN IF NOT EXISTS command_cooldown_ms INTEGER NOT NULL DEFAULT 2500,
+      ADD COLUMN IF NOT EXISTS transcription_enabled BOOLEAN NOT NULL DEFAULT TRUE
     `);
   }
 
@@ -230,6 +233,7 @@ class PostgresSettingsStore {
         botPresent: row.bot_present,
         botLastSeenAt: row.bot_last_seen_at,
         debugTranscripts: row.debug_transcripts,
+        transcriptionEnabled: row.transcription_enabled,
         wakeWord: row.wake_word,
         requireWakeWord: row.require_wake_word,
         transcriptionSilenceMs: row.transcription_silence_ms,
@@ -261,6 +265,7 @@ class PostgresSettingsStore {
           bot_present,
           bot_last_seen_at,
           debug_transcripts,
+          transcription_enabled,
           wake_word,
           require_wake_word,
           transcription_silence_ms,
@@ -272,7 +277,7 @@ class PostgresSettingsStore {
           updated_at
         )
         VALUES (
-          $1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW()
+          $1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()
         )
         ON CONFLICT (guild_id)
         DO UPDATE SET
@@ -286,6 +291,7 @@ class PostgresSettingsStore {
           bot_present = EXCLUDED.bot_present,
           bot_last_seen_at = EXCLUDED.bot_last_seen_at,
           debug_transcripts = EXCLUDED.debug_transcripts,
+          transcription_enabled = EXCLUDED.transcription_enabled,
           wake_word = EXCLUDED.wake_word,
           require_wake_word = EXCLUDED.require_wake_word,
           transcription_silence_ms = EXCLUDED.transcription_silence_ms,
@@ -308,6 +314,7 @@ class PostgresSettingsStore {
         normalized.botPresent,
         normalized.botLastSeenAt ? new Date(normalized.botLastSeenAt) : null,
         normalized.debugTranscripts,
+        normalized.transcriptionEnabled,
         normalized.wakeWord,
         normalized.requireWakeWord,
         normalized.transcriptionSilenceMs,

@@ -169,6 +169,7 @@ function mapGuildForm(req, config, existingSettings = {}) {
     preferredTextChannelId: req.body.preferredTextChannelId,
     preferredVoiceChannelId: req.body.preferredVoiceChannelId,
     debugTranscripts: parseBoolean(req.body.debugTranscripts),
+    transcriptionEnabled: parseBoolean(req.body.transcriptionEnabled),
     wakeWord: req.body.wakeWord,
     requireWakeWord: parseBoolean(req.body.requireWakeWord),
     transcriptionSilenceMs: req.body.transcriptionSilenceMs,
@@ -467,6 +468,8 @@ function createWebApp({ config, store }) {
 module.exports = {
   createWebApp,
 };
+
+
 
 
 

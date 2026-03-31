@@ -157,8 +157,8 @@ function hasKeywordMatch(commandText, keywords, threshold) {
   return tokens.some((token) => bestMatch(token, keywords, threshold));
 }
 
-function parseFixedCommand(commandText, rawTranscript) {
-  const fixedCommands = [
+function getFixedCommands() {
+  return [
     {
       type: "lock",
       aliases: [
@@ -170,6 +170,7 @@ function parseFixedCommand(commandText, rawTranscript) {
         "lock the channel",
       ],
       verbs: ["lock", "locked", "locking", "close", "closed", "closing"],
+      blockers: ["unlock", "unlocked", "unlocking", "open", "opened", "opening"],
     },
     {
       type: "unlock",
@@ -182,15 +183,33 @@ function parseFixedCommand(commandText, rawTranscript) {
         "unlock the channel",
       ],
       verbs: ["unlock", "unlocked", "unlocking", "open", "opened", "opening"],
+      blockers: ["lock", "locked", "locking", "close", "closed", "closing"],
     },
   ];
+}
+
+function parseFixedCommand(commandText, rawTranscript) {
   const channelTerms = ["vc", "bc", "voice", "channel", "room", "call"];
+  const commands = getFixedCommands();
+  const tokens = commandText.split(" ").filter(Boolean);
+
+  for (const command of commands) {
+    if (command.aliases.includes(commandText)) {
+      return {
+        type: command.type,
+        transcript: commandText,
+        rawTranscript,
+        confidence: 1,
+        matchType: "exact-alias",
+      };
+    }
+  }
 
   let best = null;
 
-  for (const command of fixedCommands) {
-    const aliasMatch = bestMatch(commandText, command.aliases, 0.68);
-    if (aliasMatch && (!best || aliasMatch.score > best.score)) {
+  for (const command of commands) {
+    const aliasMatch = bestMatch(commandText, command.aliases, 0.82);
+    if (aliasMatch && (!best || aliasMatch.score > best.confidence)) {
       best = {
         type: command.type,
         transcript: commandText,
@@ -200,16 +219,16 @@ function parseFixedCommand(commandText, rawTranscript) {
       };
     }
 
-    if (
-      hasKeywordMatch(commandText, command.verbs, 0.72) &&
-      hasKeywordMatch(commandText, channelTerms, 0.6) &&
-      (!best || 0.7 > best.confidence)
-    ) {
+    const hasVerb = tokens.some((token) => command.verbs.includes(token));
+    const hasBlocker = tokens.some((token) => command.blockers.includes(token));
+    const hasChannel = hasKeywordMatch(commandText, channelTerms, 0.72);
+
+    if (hasVerb && !hasBlocker && hasChannel && (!best || 0.92 > best.confidence)) {
       best = {
         type: command.type,
         transcript: commandText,
         rawTranscript,
-        confidence: 0.7,
+        confidence: 0.92,
         matchType: "keyword",
       };
     }
@@ -237,7 +256,15 @@ function parseTargetCommand(commandText, rawTranscript) {
   let bestAction = null;
 
   for (const action of actionGroups) {
-    const match = bestMatch(firstWord, action.verbs, 0.58);
+    if (action.verbs.includes(firstWord)) {
+      bestAction = {
+        type: action.type,
+        confidence: 1,
+      };
+      break;
+    }
+
+    const match = bestMatch(firstWord, action.verbs, 0.64);
     if (match && (!bestAction || match.score > bestAction.confidence)) {
       bestAction = {
         type: action.type,
