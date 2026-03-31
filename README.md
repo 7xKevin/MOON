@@ -67,7 +67,7 @@ Key variables:
 - `SESSION_SECRET` for dashboard mode
 - `DATABASE_URL` for shared Postgres
 - `GROQ_API_KEY` for Groq speech-to-text
-- `GROQ_STT_MODEL` defaults to `whisper-large-v3-turbo`
+- `GROQ_STT_MODEL` defaults to `whisper-large-v3`
 - `GROQ_STT_URL` defaults to `https://api.groq.com/openai/v1/audio/transcriptions`
 - `WHISPER_CPP_PATH` and `WHISPER_MODEL_PATH` are optional local fallback settings
 - `WHISPER_LANGUAGE` defaults to `en`
@@ -100,3 +100,4 @@ If `GROQ_API_KEY` is present, MOON uses Groq first and only falls back to local 
 - The bot still converts incoming Discord audio to `16kHz` mono WAV before transcription.
 - Local `whisper.cpp` is still supported as a fallback path, but it is no longer required when Groq is configured.
 - The dashboard exposes `GET /healthz` for a simple health check.
+

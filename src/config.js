@@ -48,7 +48,7 @@ const schema = z.object({
   DATA_DIR: z.string().default(path.join(process.cwd(), "data")),
   CONTROLLER_USER_ID: optionalString,
   GROQ_API_KEY: optionalString,
-  GROQ_STT_MODEL: z.string().default("whisper-large-v3-turbo"),
+  GROQ_STT_MODEL: z.string().default("whisper-large-v3"),
   GROQ_STT_URL: z.string().default("https://api.groq.com/openai/v1/audio/transcriptions"),
   WHISPER_CPP_PATH: optionalString,
   WHISPER_MODEL_PATH: optionalString,
@@ -120,3 +120,4 @@ module.exports = {
     isProduction: process.env.NODE_ENV === "production",
   },
 };
+
