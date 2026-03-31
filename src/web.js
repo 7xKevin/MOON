@@ -116,7 +116,12 @@ async function fetchDiscordResource(pathname, accessToken) {
   });
 
   if (!response.ok) {
-    throw new Error(`Discord API request failed for ${pathname} with status ${response.status}.`);
+    const retryAfterHeader = response.headers.get("retry-after");
+    const retryAfterSeconds = retryAfterHeader ? Number.parseFloat(retryAfterHeader) : null;
+    const error = new Error(`Discord API request failed for ${pathname} with status ${response.status}.`);
+    error.status = response.status;
+    error.retryAfterSeconds = Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : null;
+    throw error;
   }
 
   return response.json();
@@ -222,14 +227,37 @@ async function getDiscordAccessToken(req, config) {
 }
 
 async function loadSessionGuilds(req, config) {
-  const accessToken = await getDiscordAccessToken(req, config);
-  if (!accessToken) {
-    return req.session.guilds ?? [];
+  const cachedGuilds = req.session.guilds ?? [];
+  const lastFetchedAt = req.session.guildsFetchedAt ?? 0;
+  const cacheAgeMs = Date.now() - lastFetchedAt;
+
+  if (cachedGuilds.length > 0 && cacheAgeMs >= 0 && cacheAgeMs < config.DASHBOARD_GUILD_CACHE_MS) {
+    return cachedGuilds;
   }
 
-  const guilds = await fetchDiscordResource("/users/@me/guilds", accessToken);
-  req.session.guilds = guilds;
-  return guilds;
+  const accessToken = await getDiscordAccessToken(req, config);
+  if (!accessToken) {
+    return cachedGuilds;
+  }
+
+  try {
+    const guilds = await fetchDiscordResource("/users/@me/guilds", accessToken);
+    req.session.guilds = guilds;
+    req.session.guildsFetchedAt = Date.now();
+    return guilds;
+  } catch (error) {
+    if (error?.status === 429 && cachedGuilds.length > 0) {
+      console.warn(
+        `[MOON] Discord guild refresh hit rate limit; reusing cached guilds for ${Math.max(
+          0,
+          Math.ceil(error.retryAfterSeconds ?? 0)
+        )}s.`
+      );
+      return cachedGuilds;
+    }
+
+    throw error;
+  }
 }
 
 function createWebApp({ config, store }) {
@@ -439,3 +467,6 @@ function createWebApp({ config, store }) {
 module.exports = {
   createWebApp,
 };
+
+
+

@@ -63,6 +63,7 @@ const schema = z.object({
   TRANSCRIPTION_SILENCE_MS: z.coerce.number().int().positive().default(1200),
   COMMAND_COOLDOWN_MS: z.coerce.number().int().nonnegative().default(2500),
   DEBUG_TRANSCRIPTS: booleanFromEnv.default(false),
+  DASHBOARD_GUILD_CACHE_MS: z.coerce.number().int().positive().default(120000),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -107,3 +108,5 @@ module.exports = {
     isProduction: process.env.NODE_ENV === "production",
   },
 };
+
+
