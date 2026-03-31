@@ -386,7 +386,7 @@ function createWebApp({ config, store }) {
         accessibleGuilds.map(async (guild) => ({
           ...guild,
           inviteUrl: buildBotInviteUrl(config, guild.id),
-          settings: await store.getGuildSettings(guild.id, guild.name),
+          settings: await store.getGuildSettings(guild.id, guild.name, req.session.user.id),
         }))
       );
 
@@ -408,7 +408,7 @@ function createWebApp({ config, store }) {
         return;
       }
 
-      const settings = await store.getGuildSettings(guild.id, guild.name);
+      const settings = await store.getGuildSettings(guild.id, guild.name, req.session.user.id);
 
       res.render("guild", {
         title: `${guild.name} Settings`,
@@ -432,10 +432,10 @@ function createWebApp({ config, store }) {
         return;
       }
 
-      const currentSettings = await store.getGuildSettings(guild.id, guild.name);
+      const currentSettings = await store.getGuildSettings(guild.id, guild.name, req.session.user.id);
       const nextSettings = mapGuildForm(req, config, currentSettings);
       nextSettings.guildName = guild.name;
-      await store.saveGuildSettings(nextSettings);
+      await store.saveGuildSettings(nextSettings, req.session.user.id);
 
       res.redirect(`/guilds/${guild.id}?saved=1`);
     } catch (error) {

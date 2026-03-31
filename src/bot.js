@@ -320,8 +320,8 @@ function createBot({ config, store }) {
     };
   }
 
-  async function getGuildSettings(guild) {
-    return store.getGuildSettings(guild.id, guild.name);
+  async function getGuildSettings(guild, userId = null) {
+    return store.getGuildSettings(guild.id, guild.name, userId);
   }
 
   async function syncBotPresence(clientInstance) {
@@ -737,7 +737,7 @@ function createBot({ config, store }) {
       return;
     }
 
-    const guildSettings = await getGuildSettings(guild);
+    const guildSettings = await getGuildSettings(guild, session.ownerUserId);
     session.guildSettingsSnapshot = guildSettings;
     session.runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings);
 
@@ -850,7 +850,7 @@ function createBot({ config, store }) {
       return;
     }
 
-    const guildSettings = session.guildSettingsSnapshot ?? (await getGuildSettings(guild));
+    const guildSettings = session.guildSettingsSnapshot ?? (await getGuildSettings(guild, session.ownerUserId));
     session.guildSettingsSnapshot = guildSettings;
     session.runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings);
 
@@ -915,7 +915,8 @@ function createBot({ config, store }) {
       throw createUserFacingError("Join a voice channel first, then use !join.");
     }
 
-    const guildSettings = await getGuildSettings(member.guild);
+    const ownerUserId = config.CONTROLLER_USER_ID ?? member.id;
+    const guildSettings = await getGuildSettings(member.guild, ownerUserId);
     if (!guildSettings.botEnabled) {
       throw createUserFacingError("MOON is paused for this server in the dashboard.");
     }
@@ -940,7 +941,7 @@ function createBot({ config, store }) {
       connection,
       receiver: connection.receiver,
       onSpeakingStart,
-      ownerUserId: config.CONTROLLER_USER_ID ?? member.id,
+      ownerUserId,
       textChannelId: guildSettings.preferredTextChannelId || textChannel.id,
       isProcessing: false,
       speechQueue: [],
@@ -1013,7 +1014,7 @@ function createBot({ config, store }) {
     const commandName = content.slice(config.PREFIX.length).trim().toLowerCase();
 
     try {
-      const guildSettings = await getGuildSettings(message.guild);
+      const guildSettings = await getGuildSettings(message.guild, message.author.id);
 
       if (commandName === "help") {
         await message.reply(getHelpText(guildSettings));

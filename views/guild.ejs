@@ -6,6 +6,7 @@
     <title><%= title %></title>
     <link rel="stylesheet" href="/static/styles.css" />
     <script src="/static/theme.js" defer></script>
+    <script src="/static/guild-settings.js" defer></script>
   </head>
   <body>
     <div class="layout">
@@ -44,7 +45,7 @@
         </header>
 
         <% if (saved) { %>
-          <div class="notice">Settings saved.</div>
+          <div class="notice" data-auto-dismiss>Settings saved.</div>
         <% } %>
 
         <section class="card">
@@ -60,9 +61,12 @@
               <p class="section-lead">
                 The session starter always keeps control. Discord admins keep access too. Everything else here is optional.
               </p>
+              <p class="section-lead">
+                Saved for <strong><%= currentUser.globalName || currentUser.username %></strong> only. Other Discord admins can keep their own MOON settings for this guild.
+              </p>
             </div>
 
-            <form method="post" action="/guilds/<%= guild.id %>" class="form-shell">
+            <form method="post" action="/guilds/<%= guild.id %>" class="form-shell" data-settings-form>
               <input type="hidden" name="guildName" value="<%= guild.name %>" />
               <input type="hidden" name="csrfToken" value="<%= csrfToken %>" />
 
@@ -73,7 +77,7 @@
                     <input type="checkbox" name="botEnabled" <%= settings.botEnabled ? "checked" : "" %> />
                     <span class="toggle-copy">
                       <span>Enable MOON in this guild</span>
-                      <small>Turns command handling on or off for the whole server.</small>
+                      <small>Turns command handling on or off for this server profile.</small>
                     </span>
                   </label>
                   <label class="toggle">
@@ -195,12 +199,22 @@
               </section>
 
               <div class="inline-actions">
-                <button class="primary" type="submit">Save Settings</button>
                 <% if (settings.botPresent) { %>
-                  <span class="button disabled">Already Invited</span>
+                  <span class="button success disabled">Already Invited</span>
                 <% } else if (inviteUrl) { %>
                   <a class="button" href="<%= inviteUrl %>" target="_blank" rel="noreferrer">Invite MOON</a>
                 <% } %>
+              </div>
+
+              <div class="save-bar" data-save-bar>
+                <div class="save-bar-copy">
+                  <strong>You have unsaved changes.</strong>
+                  <span>Save to update your Discord account’s MOON settings for this guild.</span>
+                </div>
+                <div class="inline-actions">
+                  <button class="button" type="button" data-reset-form>Cancel</button>
+                  <button class="primary" type="submit">Save Changes</button>
+                </div>
               </div>
             </form>
           </div>
@@ -209,4 +223,3 @@
     </div>
   </body>
 </html>
-

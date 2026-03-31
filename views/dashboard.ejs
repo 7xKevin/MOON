@@ -55,7 +55,7 @@
             <span class="eyebrow">Guild selection</span>
             <h2 class="section-title" style="margin-top: 10px;">Choose a server and edit the bot rules.</h2>
             <p class="section-lead">
-              Each guild gets its own access list, safety toggles, and preferred channels.
+              Each Discord account keeps its own saved control profile for each guild.
             </p>
           </div>
         </section>
@@ -87,7 +87,7 @@
                 <div class="inline-actions" style="margin-top: 14px;">
                   <a class="button primary" href="/guilds/<%= guild.id %>">Open Settings</a>
                   <% if (guild.settings.botPresent) { %>
-                    <span class="button disabled">Already Invited</span>
+                    <span class="button success disabled">Already Invited</span>
                   <% } else if (guild.inviteUrl) { %>
                     <a class="button" href="<%= guild.inviteUrl %>" target="_blank" rel="noreferrer">Invite MOON</a>
                   <% } %>

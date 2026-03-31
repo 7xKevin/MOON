@@ -104,6 +104,10 @@ if (config.SERVICE_MODE === "web" || config.SERVICE_MODE === "all") {
   requireSetting("DISCORD_CLIENT_ID", "running the dashboard");
   requireSetting("DISCORD_CLIENT_SECRET", "running the dashboard");
   requireSetting("SESSION_SECRET", "running the dashboard");
+
+  if (process.env.NODE_ENV === "production") {
+    requireSetting("DATABASE_URL", "running the dashboard in production");
+  }
 }
 
 const appBaseUrl = config.APP_BASE_URL ?? `http://localhost:${config.PORT}`;

@@ -85,6 +85,59 @@ function createDefaultGuildSettings(guildId, guildName, defaults = {}) {
   );
 }
 
+function normalizeSettingsFileShape(raw) {
+  if (raw && typeof raw === "object" && raw.sharedGuilds && raw.userGuildSettings) {
+    return {
+      sharedGuilds: raw.sharedGuilds,
+      userGuildSettings: raw.userGuildSettings,
+      legacyGuildSettings: raw.legacyGuildSettings ?? {},
+    };
+  }
+
+  const legacyGuildSettings = raw && typeof raw === "object" ? raw : {};
+  const sharedGuilds = {};
+
+  for (const [guildId, settings] of Object.entries(legacyGuildSettings)) {
+    sharedGuilds[guildId] = {
+      guildId,
+      guildName: settings.guildName ?? "Unknown Server",
+      botPresent: settings.botPresent === true,
+      botLastSeenAt: settings.botLastSeenAt ? new Date(settings.botLastSeenAt).toISOString() : null,
+    };
+  }
+
+  return {
+    sharedGuilds,
+    userGuildSettings: {},
+    legacyGuildSettings,
+  };
+}
+
+function stripSharedGuildState(settings) {
+  const normalized = normalizeGuildSettings(settings);
+  return {
+    guildId: normalized.guildId,
+    guildName: normalized.guildName,
+    botEnabled: normalized.botEnabled,
+    adminUserIds: normalized.adminUserIds,
+    commandUserIds: normalized.commandUserIds,
+    allowedRoleIds: normalized.allowedRoleIds,
+    preferredTextChannelId: normalized.preferredTextChannelId,
+    preferredVoiceChannelId: normalized.preferredVoiceChannelId,
+    debugTranscripts: normalized.debugTranscripts,
+    transcriptionEnabled: normalized.transcriptionEnabled,
+    wakeWord: normalized.wakeWord,
+    requireWakeWord: normalized.requireWakeWord,
+    transcriptionSilenceMs: normalized.transcriptionSilenceMs,
+    commandCooldownMs: normalized.commandCooldownMs,
+    commandDragEnabled: normalized.commandDragEnabled,
+    commandMuteEnabled: normalized.commandMuteEnabled,
+    commandKickEnabled: normalized.commandKickEnabled,
+    commandLockEnabled: normalized.commandLockEnabled,
+    updatedAt: normalized.updatedAt,
+  };
+}
+
 class FileSettingsStore {
   constructor(config) {
     this.filePath = path.join(config.DATA_DIR, "guild-settings.json");
@@ -102,41 +155,76 @@ class FileSettingsStore {
     try {
       await fs.access(this.filePath);
     } catch {
-      await fs.writeFile(this.filePath, JSON.stringify({}, null, 2));
+      await fs.writeFile(
+        this.filePath,
+        JSON.stringify({ sharedGuilds: {}, userGuildSettings: {}, legacyGuildSettings: {} }, null, 2)
+      );
     }
   }
 
   async readAll() {
     const raw = await fs.readFile(this.filePath, "utf8");
-    return JSON.parse(raw);
+    return normalizeSettingsFileShape(JSON.parse(raw));
   }
 
   async writeAll(data) {
     await fs.writeFile(this.filePath, JSON.stringify(data, null, 2));
   }
 
-  async getGuildSettings(guildId, guildName = "Unknown Server") {
+  async getGuildSettings(guildId, guildName = "Unknown Server", userId = null) {
     const all = await this.readAll();
+    const shared = all.sharedGuilds[guildId] ?? {
+      guildId,
+      guildName,
+      botPresent: false,
+      botLastSeenAt: null,
+    };
+    const userSettings = userId ? all.userGuildSettings?.[guildId]?.[userId] : null;
+    const legacySettings = all.legacyGuildSettings?.[guildId] ?? null;
+    const base = userSettings ?? legacySettings ?? createDefaultGuildSettings(guildId, guildName, this.defaults);
+
     return normalizeGuildSettings(
-      all[guildId] ?? createDefaultGuildSettings(guildId, guildName, this.defaults),
+      {
+        ...base,
+        guildId,
+        guildName: guildName || shared.guildName || base.guildName,
+        botPresent: shared.botPresent,
+        botLastSeenAt: shared.botLastSeenAt,
+      },
       this.defaults
     );
   }
 
-  async saveGuildSettings(settings) {
+  async saveGuildSettings(settings, userId) {
     const normalized = normalizeGuildSettings(settings, this.defaults);
     const all = await this.readAll();
-    all[normalized.guildId] = normalized;
+    const shared = all.sharedGuilds[normalized.guildId] ?? {
+      guildId: normalized.guildId,
+      guildName: normalized.guildName,
+      botPresent: false,
+      botLastSeenAt: null,
+    };
+
+    all.sharedGuilds[normalized.guildId] = {
+      ...shared,
+      guildId: normalized.guildId,
+      guildName: normalized.guildName,
+    };
+
+    const effectiveUserId = userId || "global";
+    all.userGuildSettings[normalized.guildId] ??= {};
+    all.userGuildSettings[normalized.guildId][effectiveUserId] = stripSharedGuildState(normalized);
+
     await this.writeAll(all);
-    return normalized;
+    return this.getGuildSettings(normalized.guildId, normalized.guildName, effectiveUserId);
   }
 
   async resetBotPresence() {
     const all = await this.readAll();
 
-    for (const guildId of Object.keys(all)) {
-      all[guildId] = {
-        ...all[guildId],
+    for (const guildId of Object.keys(all.sharedGuilds)) {
+      all.sharedGuilds[guildId] = {
+        ...all.sharedGuilds[guildId],
         botPresent: false,
       };
     }
@@ -145,14 +233,24 @@ class FileSettingsStore {
   }
 
   async updateBotPresence(guildId, guildName, botPresent) {
-    const current = await this.getGuildSettings(guildId, guildName);
-    return this.saveGuildSettings({
+    const all = await this.readAll();
+    const current = all.sharedGuilds[guildId] ?? {
+      guildId,
+      guildName,
+      botPresent: false,
+      botLastSeenAt: null,
+    };
+
+    all.sharedGuilds[guildId] = {
       ...current,
       guildId,
       guildName,
       botPresent,
       botLastSeenAt: botPresent ? new Date().toISOString() : current.botLastSeenAt,
-    });
+    };
+
+    await this.writeAll(all);
+    return all.sharedGuilds[guildId];
   }
 }
 
@@ -171,6 +269,42 @@ class PostgresSettingsStore {
   }
 
   async init() {
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS guild_presence (
+        guild_id TEXT PRIMARY KEY,
+        guild_name TEXT NOT NULL,
+        bot_present BOOLEAN NOT NULL DEFAULT FALSE,
+        bot_last_seen_at TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS guild_user_settings (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        guild_name TEXT NOT NULL,
+        bot_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        admin_user_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+        command_user_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+        allowed_role_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+        preferred_text_channel_id TEXT,
+        preferred_voice_channel_id TEXT,
+        debug_transcripts BOOLEAN NOT NULL DEFAULT FALSE,
+        transcription_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        wake_word TEXT NOT NULL DEFAULT 'moon',
+        require_wake_word BOOLEAN NOT NULL DEFAULT TRUE,
+        transcription_silence_ms INTEGER NOT NULL DEFAULT 1200,
+        command_cooldown_ms INTEGER NOT NULL DEFAULT 900,
+        command_drag_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        command_mute_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        command_kick_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        command_lock_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (guild_id, user_id)
+      )
+    `);
+
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS guild_settings (
         guild_id TEXT PRIMARY KEY,
@@ -209,52 +343,167 @@ class PostgresSettingsStore {
     `);
   }
 
-  async getGuildSettings(guildId, guildName = "Unknown Server") {
+  async getSharedGuildState(guildId, guildName = "Unknown Server") {
+    const result = await this.pool.query(
+      `SELECT guild_id, guild_name, bot_present, bot_last_seen_at FROM guild_presence WHERE guild_id = $1`,
+      [guildId]
+    );
+
+    if (result.rowCount) {
+      const row = result.rows[0];
+      return {
+        guildId: row.guild_id,
+        guildName: row.guild_name,
+        botPresent: row.bot_present,
+        botLastSeenAt: row.bot_last_seen_at ? new Date(row.bot_last_seen_at).toISOString() : null,
+      };
+    }
+
+    const legacy = await this.pool.query(
+      `SELECT guild_id, guild_name, bot_present, bot_last_seen_at FROM guild_settings WHERE guild_id = $1`,
+      [guildId]
+    );
+
+    if (legacy.rowCount) {
+      const row = legacy.rows[0];
+      return {
+        guildId: row.guild_id,
+        guildName: row.guild_name,
+        botPresent: row.bot_present,
+        botLastSeenAt: row.bot_last_seen_at ? new Date(row.bot_last_seen_at).toISOString() : null,
+      };
+    }
+
+    return {
+      guildId,
+      guildName,
+      botPresent: false,
+      botLastSeenAt: null,
+    };
+  }
+
+  async getLegacyGuildSettings(guildId) {
     const result = await this.pool.query(
       `SELECT * FROM guild_settings WHERE guild_id = $1`,
       [guildId]
     );
 
     if (!result.rowCount) {
-      return createDefaultGuildSettings(guildId, guildName, this.defaults);
+      return null;
     }
 
     const row = result.rows[0];
+    return {
+      guildId: row.guild_id,
+      guildName: row.guild_name,
+      botEnabled: row.bot_enabled,
+      adminUserIds: row.admin_user_ids,
+      commandUserIds: row.command_user_ids,
+      allowedRoleIds: row.allowed_role_ids,
+      preferredTextChannelId: row.preferred_text_channel_id,
+      preferredVoiceChannelId: row.preferred_voice_channel_id,
+      debugTranscripts: row.debug_transcripts,
+      transcriptionEnabled: row.transcription_enabled,
+      wakeWord: row.wake_word,
+      requireWakeWord: row.require_wake_word,
+      transcriptionSilenceMs: row.transcription_silence_ms,
+      commandCooldownMs: row.command_cooldown_ms,
+      commandDragEnabled: row.command_drag_enabled,
+      commandMuteEnabled: row.command_mute_enabled,
+      commandKickEnabled: row.command_kick_enabled,
+      commandLockEnabled: row.command_lock_enabled,
+      updatedAt: row.updated_at,
+      botPresent: row.bot_present,
+      botLastSeenAt: row.bot_last_seen_at,
+    };
+  }
+
+  async getGuildSettings(guildId, guildName = "Unknown Server", userId = null) {
+    const shared = await this.getSharedGuildState(guildId, guildName);
+    let base = null;
+
+    if (userId) {
+      const result = await this.pool.query(
+        `SELECT * FROM guild_user_settings WHERE guild_id = $1 AND user_id = $2`,
+        [guildId, userId]
+      );
+
+      if (result.rowCount) {
+        const row = result.rows[0];
+        base = {
+          guildId: row.guild_id,
+          guildName: row.guild_name,
+          botEnabled: row.bot_enabled,
+          adminUserIds: row.admin_user_ids,
+          commandUserIds: row.command_user_ids,
+          allowedRoleIds: row.allowed_role_ids,
+          preferredTextChannelId: row.preferred_text_channel_id,
+          preferredVoiceChannelId: row.preferred_voice_channel_id,
+          debugTranscripts: row.debug_transcripts,
+          transcriptionEnabled: row.transcription_enabled,
+          wakeWord: row.wake_word,
+          requireWakeWord: row.require_wake_word,
+          transcriptionSilenceMs: row.transcription_silence_ms,
+          commandCooldownMs: row.command_cooldown_ms,
+          commandDragEnabled: row.command_drag_enabled,
+          commandMuteEnabled: row.command_mute_enabled,
+          commandKickEnabled: row.command_kick_enabled,
+          commandLockEnabled: row.command_lock_enabled,
+          updatedAt: row.updated_at,
+        };
+      }
+    }
+
+    if (!base) {
+      base = (await this.getLegacyGuildSettings(guildId)) ?? createDefaultGuildSettings(guildId, guildName, this.defaults);
+    }
+
     return normalizeGuildSettings(
       {
-        guildId: row.guild_id,
-        guildName: row.guild_name,
-        botEnabled: row.bot_enabled,
-        adminUserIds: row.admin_user_ids,
-        commandUserIds: row.command_user_ids,
-        allowedRoleIds: row.allowed_role_ids,
-        preferredTextChannelId: row.preferred_text_channel_id,
-        preferredVoiceChannelId: row.preferred_voice_channel_id,
-        botPresent: row.bot_present,
-        botLastSeenAt: row.bot_last_seen_at,
-        debugTranscripts: row.debug_transcripts,
-        transcriptionEnabled: row.transcription_enabled,
-        wakeWord: row.wake_word,
-        requireWakeWord: row.require_wake_word,
-        transcriptionSilenceMs: row.transcription_silence_ms,
-        commandCooldownMs: row.command_cooldown_ms,
-        commandDragEnabled: row.command_drag_enabled,
-        commandMuteEnabled: row.command_mute_enabled,
-        commandKickEnabled: row.command_kick_enabled,
-        commandLockEnabled: row.command_lock_enabled,
-        updatedAt: row.updated_at,
+        ...base,
+        guildId,
+        guildName: guildName || shared.guildName || base.guildName,
+        botPresent: shared.botPresent,
+        botLastSeenAt: shared.botLastSeenAt,
       },
       this.defaults
     );
   }
 
-  async saveGuildSettings(settings) {
+  async saveGuildSettings(settings, userId) {
     const normalized = normalizeGuildSettings(settings, this.defaults);
+    const effectiveUserId = userId || "global";
+    const shared = await this.getSharedGuildState(normalized.guildId, normalized.guildName);
 
     await this.pool.query(
       `
-        INSERT INTO guild_settings (
+        INSERT INTO guild_presence (
           guild_id,
+          guild_name,
+          bot_present,
+          bot_last_seen_at,
+          updated_at
+        ) VALUES ($1, $2, $3, $4, NOW())
+        ON CONFLICT (guild_id)
+        DO UPDATE SET
+          guild_name = EXCLUDED.guild_name,
+          bot_present = EXCLUDED.bot_present,
+          bot_last_seen_at = EXCLUDED.bot_last_seen_at,
+          updated_at = NOW()
+      `,
+      [
+        normalized.guildId,
+        normalized.guildName,
+        shared.botPresent,
+        shared.botLastSeenAt ? new Date(shared.botLastSeenAt) : null,
+      ]
+    );
+
+    await this.pool.query(
+      `
+        INSERT INTO guild_user_settings (
+          guild_id,
+          user_id,
           guild_name,
           bot_enabled,
           admin_user_ids,
@@ -262,8 +511,6 @@ class PostgresSettingsStore {
           allowed_role_ids,
           preferred_text_channel_id,
           preferred_voice_channel_id,
-          bot_present,
-          bot_last_seen_at,
           debug_transcripts,
           transcription_enabled,
           wake_word,
@@ -277,9 +524,9 @@ class PostgresSettingsStore {
           updated_at
         )
         VALUES (
-          $1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()
+          $1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW()
         )
-        ON CONFLICT (guild_id)
+        ON CONFLICT (guild_id, user_id)
         DO UPDATE SET
           guild_name = EXCLUDED.guild_name,
           bot_enabled = EXCLUDED.bot_enabled,
@@ -288,8 +535,6 @@ class PostgresSettingsStore {
           allowed_role_ids = EXCLUDED.allowed_role_ids,
           preferred_text_channel_id = EXCLUDED.preferred_text_channel_id,
           preferred_voice_channel_id = EXCLUDED.preferred_voice_channel_id,
-          bot_present = EXCLUDED.bot_present,
-          bot_last_seen_at = EXCLUDED.bot_last_seen_at,
           debug_transcripts = EXCLUDED.debug_transcripts,
           transcription_enabled = EXCLUDED.transcription_enabled,
           wake_word = EXCLUDED.wake_word,
@@ -304,6 +549,7 @@ class PostgresSettingsStore {
       `,
       [
         normalized.guildId,
+        effectiveUserId,
         normalized.guildName,
         normalized.botEnabled,
         JSON.stringify(normalized.adminUserIds),
@@ -311,8 +557,6 @@ class PostgresSettingsStore {
         JSON.stringify(normalized.allowedRoleIds),
         normalized.preferredTextChannelId || null,
         normalized.preferredVoiceChannelId || null,
-        normalized.botPresent,
-        normalized.botLastSeenAt ? new Date(normalized.botLastSeenAt) : null,
         normalized.debugTranscripts,
         normalized.transcriptionEnabled,
         normalized.wakeWord,
@@ -326,22 +570,34 @@ class PostgresSettingsStore {
       ]
     );
 
-    return this.getGuildSettings(normalized.guildId, normalized.guildName);
+    return this.getGuildSettings(normalized.guildId, normalized.guildName, effectiveUserId);
   }
 
   async resetBotPresence() {
-    await this.pool.query(`UPDATE guild_settings SET bot_present = FALSE`);
+    await this.pool.query(`UPDATE guild_presence SET bot_present = FALSE, updated_at = NOW()`);
   }
 
   async updateBotPresence(guildId, guildName, botPresent) {
-    const current = await this.getGuildSettings(guildId, guildName);
-    return this.saveGuildSettings({
-      ...current,
-      guildId,
-      guildName,
-      botPresent,
-      botLastSeenAt: botPresent ? new Date().toISOString() : current.botLastSeenAt,
-    });
+    await this.pool.query(
+      `
+        INSERT INTO guild_presence (
+          guild_id,
+          guild_name,
+          bot_present,
+          bot_last_seen_at,
+          updated_at
+        ) VALUES ($1, $2, $3, $4, NOW())
+        ON CONFLICT (guild_id)
+        DO UPDATE SET
+          guild_name = EXCLUDED.guild_name,
+          bot_present = EXCLUDED.bot_present,
+          bot_last_seen_at = EXCLUDED.bot_last_seen_at,
+          updated_at = NOW()
+      `,
+      [guildId, guildName, botPresent, botPresent ? new Date() : null]
+    );
+
+    return this.getSharedGuildState(guildId, guildName);
   }
 }
 
@@ -359,4 +615,3 @@ module.exports = {
   normalizeGuildSettings,
   parseStringList,
 };
-
