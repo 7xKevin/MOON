@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, PermissionsBitField } = require("discord.js");
+const { Client, GatewayIntentBits, PermissionsBitField, ChannelType } = require("discord.js");
 const {
   EndBehaviorType,
   VoiceConnectionStatus,
@@ -7,7 +7,7 @@ const {
   joinVoiceChannel,
 } = require("@discordjs/voice");
 const prism = require("prism-media");
-const { normalizeText, parseVoiceCommand, similarityScore } = require("./commandParser");
+const { compactText, normalizeText, parseVoiceCommand, phoneticKey, similarityScore } = require("./commandParser");
 const { transcribePcmBuffer } = require("./transcriber");
 
 function createBot({ config, store }) {
@@ -56,8 +56,18 @@ function createBot({ config, store }) {
       return;
     }
 
-    session.receiver.speaking.off("start", session.onSpeakingStart);
-    session.connection.destroy();
+    try {
+      session.receiver?.speaking?.off("start", session.onSpeakingStart);
+    } catch {
+      // Listener cleanup is best-effort.
+    }
+
+    try {
+      session.connection?.destroy();
+    } catch {
+      // Connection may already be destroyed; session cleanup should still continue.
+    }
+
     sessions.delete(guildId);
   }
 
@@ -133,41 +143,112 @@ function createBot({ config, store }) {
     });
   }
 
+  function softenSpokenName(input) {
+    return normalizeText(input)
+      .replace(/([aeiou])\1+/g, "$1")
+      .replace(/(.)\1{2,}/g, "$1");
+  }
+
+  function scoreSimpleText(left, right) {
+    const normalizedLeft = normalizeText(left);
+    const normalizedRight = normalizeText(right);
+    const softenedLeft = softenSpokenName(normalizedLeft);
+    const softenedRight = softenSpokenName(normalizedRight);
+
+    if (!normalizedLeft || !normalizedRight) {
+      return -1;
+    }
+
+    if (
+      normalizedLeft === normalizedRight ||
+      softenedLeft === softenedRight ||
+      compactText(normalizedLeft) === compactText(normalizedRight) ||
+      compactText(softenedLeft) === compactText(softenedRight)
+    ) {
+      return 1;
+    }
+
+    return Math.max(
+      similarityScore(normalizedLeft, normalizedRight),
+      similarityScore(softenedLeft, softenedRight)
+    );
+  }
+
   function scoreMemberName(candidate, lookup) {
-    const normalizedCandidate = String(candidate ?? "").trim().toLowerCase();
-    const normalizedLookup = String(lookup ?? "").trim().toLowerCase();
+    const normalizedCandidate = normalizeText(candidate);
+    const normalizedLookup = normalizeText(lookup);
 
     if (!normalizedCandidate || !normalizedLookup) {
       return -1;
     }
 
-    if (normalizedCandidate === normalizedLookup) {
+    const compactCandidate = compactText(normalizedCandidate);
+    const compactLookup = compactText(normalizedLookup);
+    const softenedCandidate = softenSpokenName(normalizedCandidate);
+    const softenedLookup = softenSpokenName(normalizedLookup);
+    const softenedCompactCandidate = compactText(softenedCandidate);
+    const softenedCompactLookup = compactText(softenedLookup);
+
+    if (
+      normalizedCandidate === normalizedLookup ||
+      compactCandidate === compactLookup ||
+      softenedCandidate === softenedLookup ||
+      softenedCompactCandidate === softenedCompactLookup
+    ) {
       return 1;
     }
 
+    const candidatePhonetic = phoneticKey(normalizedCandidate);
+    const lookupPhonetic = phoneticKey(normalizedLookup);
+    if (candidatePhonetic && lookupPhonetic && candidatePhonetic === lookupPhonetic) {
+      return 0.95;
+    }
+
+    const candidateTokens = normalizedCandidate.split(" ").filter(Boolean);
+    const lookupTokens = normalizedLookup.split(" ").filter(Boolean);
+    const softenedCandidateTokens = softenedCandidate.split(" ").filter(Boolean);
+    const softenedLookupTokens = softenedLookup.split(" ").filter(Boolean);
+
     if (
-      normalizedCandidate.startsWith(normalizedLookup) ||
-      normalizedLookup.startsWith(normalizedCandidate)
+      lookupTokens.every((token) => candidateTokens.includes(token)) ||
+      softenedLookupTokens.every((token) => softenedCandidateTokens.includes(token))
     ) {
-      return 0.92;
+      return 0.96;
     }
 
     if (
-      normalizedCandidate.includes(normalizedLookup) ||
-      normalizedLookup.includes(normalizedCandidate)
+      compactCandidate.startsWith(compactLookup) ||
+      compactLookup.startsWith(compactCandidate) ||
+      softenedCompactCandidate.startsWith(softenedCompactLookup) ||
+      softenedCompactLookup.startsWith(softenedCompactCandidate)
     ) {
-      return 0.82;
+      return 0.93;
     }
 
-    return similarityScore(normalizedCandidate, normalizedLookup);
+    if (
+      compactCandidate.includes(compactLookup) ||
+      compactLookup.includes(compactCandidate) ||
+      softenedCompactCandidate.includes(softenedCompactLookup) ||
+      softenedCompactLookup.includes(softenedCompactCandidate)
+    ) {
+      return 0.88;
+    }
+
+    const tokenScores = lookupTokens.map((token, index) => {
+      const directScore = scoreSimpleText(normalizedCandidate, token);
+      const softenedDirectScore = scoreSimpleText(softenedCandidate, softenedLookupTokens[index] ?? token);
+      const tokenMatches = candidateTokens.map((candidateToken) => scoreSimpleText(candidateToken, token));
+      const softenedTokenMatches = softenedCandidateTokens.map((candidateToken) =>
+        scoreSimpleText(candidateToken, softenedLookupTokens[index] ?? token)
+      );
+      return Math.max(directScore, softenedDirectScore, ...tokenMatches, ...softenedTokenMatches);
+    });
+
+    return tokenScores.reduce((sum, score) => sum + score, 0) / tokenScores.length;
   }
 
   function collectMemberScores(members, lookup, scoreMap) {
     for (const member of members.values()) {
-      if (member.user.bot) {
-        continue;
-      }
-
       let bestCandidateScore = -1;
       const candidates = [
         member.displayName,
@@ -199,7 +280,7 @@ function createBot({ config, store }) {
   }
 
   async function findMemberByName(guild, rawName) {
-    const lookup = rawName.trim().toLowerCase();
+    const lookup = normalizeText(rawName);
     const scoreMap = new Map();
 
     collectMemberScores(guild.members.cache, lookup, scoreMap);
@@ -212,7 +293,7 @@ function createBot({ config, store }) {
     }
 
     let ranked = getTopMemberMatches(scoreMap);
-    if ((!ranked.length || ranked[0].score < 0.82) && guild.memberCount <= 250) {
+    if ((!ranked.length || ranked[0].score < 0.85) && guild.memberCount <= 500) {
       const fetchedMembers = await guild.members.fetch().catch(() => null);
       if (fetchedMembers?.size) {
         collectMemberScores(fetchedMembers, lookup, scoreMap);
@@ -221,7 +302,7 @@ function createBot({ config, store }) {
     }
 
     const [best, second] = ranked;
-    if (!best || best.score < 0.72) {
+    if (!best || best.score < 0.76) {
       return {
         member: null,
         score: best?.score ?? -1,
@@ -321,13 +402,131 @@ function createBot({ config, store }) {
 
   function getTargetConfidenceFloor(commandType) {
     if (commandType === "kick" || commandType === "drag") {
-      return 0.86;
+      return 0.84;
     }
 
-    return 0.8;
+    return 0.78;
   }
 
-  async function executeVoiceCommand(guild, session, command, transcript, guildSettings, controller) {
+  function getRuntimeVoiceSettings(guildSettings) {
+    return {
+      wakeWord: guildSettings.wakeWord || config.WAKE_WORD,
+      requireWakeWord:
+        guildSettings.requireWakeWord === undefined
+          ? config.REQUIRE_WAKE_WORD
+          : guildSettings.requireWakeWord,
+      transcriptionSilenceMs:
+        guildSettings.transcriptionSilenceMs || config.TRANSCRIPTION_SILENCE_MS,
+      commandCooldownMs:
+        guildSettings.commandCooldownMs || config.COMMAND_COOLDOWN_MS,
+      transcriptionEnabled:
+        guildSettings.transcriptionEnabled === undefined ? true : guildSettings.transcriptionEnabled,
+    };
+  }
+
+  function normalizeChannelLookup(input) {
+    return normalizeText(input)
+      .replace(/\b(?:voice|vc|room|channel|call)\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function scoreChannelName(candidate, lookup) {
+    const normalizedCandidate = normalizeChannelLookup(candidate);
+    const normalizedLookup = normalizeChannelLookup(lookup);
+
+    if (!normalizedCandidate || !normalizedLookup) {
+      return -1;
+    }
+
+    if (normalizedCandidate === normalizedLookup) {
+      return 1;
+    }
+
+    const compactCandidate = compactText(normalizedCandidate);
+    const compactLookup = compactText(normalizedLookup);
+
+    if (compactCandidate === compactLookup) {
+      return 1;
+    }
+
+    if (
+      compactCandidate.startsWith(compactLookup) ||
+      compactLookup.startsWith(compactCandidate)
+    ) {
+      return 0.93;
+    }
+
+    if (
+      compactCandidate.includes(compactLookup) ||
+      compactLookup.includes(compactCandidate)
+    ) {
+      return 0.87;
+    }
+
+    const candidatePhonetic = phoneticKey(normalizedCandidate);
+    const lookupPhonetic = phoneticKey(normalizedLookup);
+    if (candidatePhonetic && lookupPhonetic && candidatePhonetic === lookupPhonetic) {
+      return 0.92;
+    }
+
+    return similarityScore(normalizedCandidate, normalizedLookup);
+  }
+
+  async function findVoiceChannelByName(guild, rawName) {
+    const channels = guild.channels.cache.filter(
+      (channel) => channel.type === ChannelType.GuildVoice
+    );
+
+    let best = null;
+    let second = null;
+
+    for (const channel of channels.values()) {
+      const score = scoreChannelName(channel.name, rawName);
+      if (score < 0) {
+        continue;
+      }
+
+      const candidate = { channel, score };
+      if (!best || score > best.score) {
+        second = best;
+        best = candidate;
+      } else if (!second || score > second.score) {
+        second = candidate;
+      }
+    }
+
+    if (!best || best.score < 0.76) {
+      return { channel: null, score: best?.score ?? -1, ambiguous: false, secondChannel: second?.channel ?? null };
+    }
+
+    return {
+      channel: best.channel,
+      score: best.score,
+      ambiguous: Boolean(second && best.score - second.score < 0.05),
+      secondChannel: second?.channel ?? null,
+    };
+  }
+
+  function resolveCommandTarget(guild, speaker, targetName) {
+    const normalizedTarget = normalizeText(targetName);
+    if (!normalizedTarget) {
+      return null;
+    }
+
+    if (["me", "myself", "self"].includes(normalizedTarget)) {
+      return { member: speaker, score: 1, ambiguous: false, special: true };
+    }
+
+    if (["bot", "moon", "nova", "the bot", "the moon"].includes(normalizedTarget)) {
+      const botMember = guild.members.me;
+      return botMember ? { member: botMember, score: 1, ambiguous: false, special: true } : null;
+    }
+
+    return null;
+  }
+
+  async function executeVoiceCommand(guild, session, command, transcript, guildSettings, controller, speaker) {
     const controllerChannel = controller.voice.channel;
 
     if (!controllerChannel) {
@@ -384,8 +583,9 @@ function createBot({ config, store }) {
       return;
     }
 
-    const targetMatch = await findMemberByName(guild, command.targetName);
-    if (!targetMatch.member) {
+    const specialTarget = resolveCommandTarget(guild, speaker, command.targetName);
+    const targetMatch = specialTarget ?? (await findMemberByName(guild, command.targetName));
+    if (!targetMatch?.member) {
       await sendStatus(
         guild,
         `I heard \`${transcript}\`, but I couldn't confidently find **${command.targetName}**.`
@@ -404,7 +604,7 @@ function createBot({ config, store }) {
       return;
     }
 
-    if (targetMatch.score < getTargetConfidenceFloor(command.type)) {
+    if ((targetMatch.score ?? 1) < getTargetConfidenceFloor(command.type)) {
       await sendStatus(
         guild,
         `I heard \`${transcript}\`, but I am not confident enough that **${targetMatch.member.displayName}** is the right target.`
@@ -415,16 +615,53 @@ function createBot({ config, store }) {
     const target = targetMatch.member;
 
     if (command.type === "drag") {
+      const destination =
+        command.destinationType === "named"
+          ? await findVoiceChannelByName(guild, command.destinationName)
+          : { channel: controllerChannel, score: 1, ambiguous: false };
+
+      if (!destination.channel) {
+        await sendStatus(guild, `I couldn't find a voice channel named **${command.destinationName}**.`);
+        return;
+      }
+
+      if (destination.ambiguous) {
+        const secondChannelName = destination.secondChannel?.name;
+        await sendStatus(
+          guild,
+          secondChannelName
+            ? `I found multiple channels close to **${command.destinationName}**: **${destination.channel.name}** and **${secondChannelName}**.`
+            : `I found multiple channels close to **${command.destinationName}**.`
+        );
+        return;
+      }
+
+      if (target.id === guild.members.me?.id) {
+        try {
+          session.connection.rejoin({
+            channelId: destination.channel.id,
+            selfDeaf: false,
+            selfMute: false,
+          });
+
+          await entersState(session.connection, VoiceConnectionStatus.Ready, 20000);
+          await sendStatus(guild, `Moved MOON into **${destination.channel.name}**.`);
+        } catch (error) {
+          throw createUserFacingError(`Couldn't move MOON into **${destination.channel.name}**.`);
+        }
+        return;
+      }
+
       if (!target.voice.channel) {
         await sendStatus(guild, `**${target.displayName}** is not in a voice channel.`);
         return;
       }
 
       await target.voice.setChannel(
-        controllerChannel,
+        destination.channel,
         `MOON voice command by ${controller.user.tag}`
       );
-      await sendStatus(guild, `Moved **${target.displayName}** into **${controllerChannel.name}**.`);
+      await sendStatus(guild, `Moved **${target.displayName}** into **${destination.channel.name}**.`);
       return;
     }
 
@@ -451,6 +688,12 @@ function createBot({ config, store }) {
     }
 
     if (command.type === "kick") {
+      if (target.id === guild.members.me?.id) {
+        destroySession(guild.id);
+        await sendStatusToChannel(guild, session.textChannelId, "Disconnected from voice.");
+        return;
+      }
+
       if (!target.voice.channel) {
         await sendStatus(guild, `**${target.displayName}** is not in a voice channel.`);
         return;
@@ -459,22 +702,6 @@ function createBot({ config, store }) {
       await target.voice.disconnect(`MOON voice command by ${controller.user.tag}`);
       await sendStatus(guild, `Disconnected **${target.displayName}** from voice chat.`);
     }
-  }
-
-  function getRuntimeVoiceSettings(guildSettings) {
-    return {
-      wakeWord: guildSettings.wakeWord || config.WAKE_WORD,
-      requireWakeWord:
-        guildSettings.requireWakeWord === undefined
-          ? config.REQUIRE_WAKE_WORD
-          : guildSettings.requireWakeWord,
-      transcriptionSilenceMs:
-        guildSettings.transcriptionSilenceMs || config.TRANSCRIPTION_SILENCE_MS,
-      commandCooldownMs:
-        guildSettings.commandCooldownMs || config.COMMAND_COOLDOWN_MS,
-      transcriptionEnabled:
-        guildSettings.transcriptionEnabled === undefined ? true : guildSettings.transcriptionEnabled,
-    };
   }
 
   async function processSpeech(guild, userId) {
@@ -553,7 +780,8 @@ function createBot({ config, store }) {
       command,
       transcript,
       guildSettings,
-      controller
+      controller,
+      speaker
     );
   }
 
@@ -685,6 +913,7 @@ function createBot({ config, store }) {
         ? `Say the wake word first, for example \`${runtimeVoiceSettings.wakeWord}, lock the vc\``
         : "Speak the command phrase directly.",
       `\`${wakePrefix}drag <name> here\``,
+      `\`${wakePrefix}drag <name> to general\``,
       `\`${wakePrefix}mute <name>\``,
       `\`${wakePrefix}unmute <name>\``,
       `\`${wakePrefix}kick <name>\``,
@@ -819,6 +1048,3 @@ function createBot({ config, store }) {
 module.exports = {
   createBot,
 };
-
-
-

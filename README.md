@@ -28,6 +28,7 @@ For the hosted version, the best practical stack is:
 - optional local `whisper.cpp` fallback
 - voice commands:
   - `drag <name> here`
+  - `drag <name> to general`
   - `mute <name>`
   - `unmute <name>`
   - `kick <name>`
@@ -100,4 +101,5 @@ If `GROQ_API_KEY` is present, MOON uses Groq first and only falls back to local 
 - The bot still converts incoming Discord audio to `16kHz` mono WAV before transcription.
 - Local `whisper.cpp` is still supported as a fallback path, but it is no longer required when Groq is configured.
 - The dashboard exposes `GET /healthz` for a simple health check.
+
 

@@ -1,9 +1,29 @@
 function normalizeText(input) {
-  return input
+  return String(input ?? "")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s']/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function compactText(input) {
+  return normalizeText(input).replace(/\s+/g, "");
+}
+
+function phoneticKey(input) {
+  const compact = compactText(input);
+  if (!compact) {
+    return "";
+  }
+
+  const first = compact[0];
+  const remainder = compact
+    .slice(1)
+    .replace(/[aeiou]/g, "")
+    .replace(/(.)\1+/g, "$1")
+    .replace(/h/g, "");
+
+  return `${first}${remainder}`;
 }
 
 function levenshteinDistance(left, right) {
@@ -107,6 +127,10 @@ function cleanCommandText(input) {
     "will you",
     "uh",
     "um",
+    "bro",
+    "anna",
+    "ra",
+    "hey",
   ];
   const trailingPhrases = [
     "please",
@@ -115,6 +139,9 @@ function cleanCommandText(input) {
     "for me",
     "thanks",
     "thank you",
+    "bro",
+    "anna",
+    "ra",
   ];
 
   return stripPhrases(stripPhrases(input, leadingPhrases, true), trailingPhrases, false);
@@ -237,6 +264,56 @@ function parseFixedCommand(commandText, rawTranscript) {
   return best;
 }
 
+function parseDragDestination(remainder, commandText, rawTranscript, confidence) {
+  if (remainder.endsWith(" here")) {
+    const targetName = cleanCommandText(remainder.slice(0, -5));
+    if (!targetName) {
+      return null;
+    }
+
+    return {
+      type: "drag",
+      targetName,
+      destinationType: "here",
+      destinationName: null,
+      transcript: commandText,
+      rawTranscript,
+      confidence,
+    };
+  }
+
+  const destinationPatterns = [
+    /^(.*?)\s+to\s+(.*)$/,
+    /^(.*?)\s+into\s+(.*)$/,
+    /^(.*?)\s+in\s+(.*)$/,
+  ];
+
+  for (const pattern of destinationPatterns) {
+    const match = remainder.match(pattern);
+    if (!match) {
+      continue;
+    }
+
+    const targetName = cleanCommandText(match[1]);
+    const destinationName = cleanCommandText(match[2]);
+    if (!targetName || !destinationName) {
+      return null;
+    }
+
+    return {
+      type: "drag",
+      targetName,
+      destinationType: "named",
+      destinationName,
+      transcript: commandText,
+      rawTranscript,
+      confidence,
+    };
+  }
+
+  return null;
+}
+
 function parseTargetCommand(commandText, rawTranscript) {
   const tokens = cleanCommandText(commandText).split(" ").filter(Boolean);
   if (tokens.length < 2) {
@@ -249,8 +326,8 @@ function parseTargetCommand(commandText, rawTranscript) {
   const actionGroups = [
     { type: "unmute", verbs: ["unmute", "unmuted", "unmuting"] },
     { type: "mute", verbs: ["mute", "muted", "muting"] },
-    { type: "kick", verbs: ["kick", "kicked", "disconnect", "disconnected"] },
-    { type: "drag", verbs: ["drag", "dragged", "move", "moved"] },
+    { type: "kick", verbs: ["kick", "kicked", "disconnect", "disconnected", "remove", "removed"] },
+    { type: "drag", verbs: ["drag", "dragged", "move", "moved", "shift", "shifted", "bring", "brought", "send", "sent"] },
   ];
 
   let bestAction = null;
@@ -278,22 +355,7 @@ function parseTargetCommand(commandText, rawTranscript) {
   }
 
   if (bestAction.type === "drag") {
-    if (!remainder.endsWith(" here")) {
-      return null;
-    }
-
-    const targetName = remainder.slice(0, -5).trim();
-    if (!targetName) {
-      return null;
-    }
-
-    return {
-      type: "drag",
-      targetName,
-      transcript: commandText,
-      rawTranscript,
-      confidence: bestAction.confidence,
-    };
+    return parseDragDestination(remainder, commandText, rawTranscript, bestAction.confidence);
   }
 
   if (!remainder) {
@@ -326,15 +388,14 @@ function parseVoiceCommand(transcript, options = {}) {
     return null;
   }
 
-  return (
-    parseFixedCommand(commandText, normalized) ||
-    parseTargetCommand(commandText, normalized)
-  );
+  return parseFixedCommand(commandText, normalized) || parseTargetCommand(commandText, normalized);
 }
 
 module.exports = {
+  compactText,
   normalizeText,
   parseVoiceCommand,
+  phoneticKey,
   similarityScore,
   stripWakeWordPrefix,
 };

@@ -58,7 +58,7 @@ const schema = z.object({
   WHISPER_LANGUAGE: z.string().default("en"),
   WHISPER_PROMPT: z
     .string()
-    .default("Discord voice commands like lock, unlock, mute, unmute, kick, and drag users here."),
+    .default("Discord voice commands like lock, unlock, mute, unmute, kick, drag people here, and move people to named voice channels like general or waiting room. User names may include punctuation or repeated vowels."),
   WHISPER_BEAM_SIZE: z.coerce.number().int().positive().default(5),
   WHISPER_BEST_OF: z.coerce.number().int().positive().default(5),
   WHISPER_TEMPERATURE: z.coerce.number().min(0).max(1).default(0),
@@ -120,4 +120,5 @@ module.exports = {
     isProduction: process.env.NODE_ENV === "production",
   },
 };
+
 
