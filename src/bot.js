@@ -388,6 +388,10 @@ function createBot({ config, store }) {
     return noiseOnlyPatterns.some((pattern) => normalized === pattern || normalized.includes(pattern));
   }
 
+  function wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   function getCommandConfidenceFloor(commandType) {
     if (commandType === "kick" || commandType === "drag") {
       return 0.82;
@@ -409,6 +413,11 @@ function createBot({ config, store }) {
   }
 
   function getRuntimeVoiceSettings(guildSettings) {
+    const configuredCooldownMs = guildSettings.commandCooldownMs || config.COMMAND_COOLDOWN_MS;
+    const commandCooldownMs = configuredCooldownMs === 2500
+      ? config.COMMAND_COOLDOWN_MS
+      : configuredCooldownMs;
+
     return {
       wakeWord: guildSettings.wakeWord || config.WAKE_WORD,
       requireWakeWord:
@@ -417,8 +426,7 @@ function createBot({ config, store }) {
           : guildSettings.requireWakeWord,
       transcriptionSilenceMs:
         guildSettings.transcriptionSilenceMs || config.TRANSCRIPTION_SILENCE_MS,
-      commandCooldownMs:
-        guildSettings.commandCooldownMs || config.COMMAND_COOLDOWN_MS,
+      commandCooldownMs: Math.max(250, commandCooldownMs),
       transcriptionEnabled:
         guildSettings.transcriptionEnabled === undefined ? true : guildSettings.transcriptionEnabled,
     };
@@ -704,18 +712,23 @@ function createBot({ config, store }) {
     }
   }
 
-  async function processSpeech(guild, userId) {
+  async function processSpeechJob(guild, job) {
     const session = getSession(guild.id);
     if (!session) {
       return;
     }
 
-    const speaker = await guild.members.fetch(userId).catch(() => null);
+    const { userId, pcmBuffer } = job;
+    if (!pcmBuffer?.length) {
+      return;
+    }
+
+    const speaker = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
     if (!speaker) {
       return;
     }
 
-    const controller = await guild.members.fetch(session.ownerUserId).catch(() => null);
+    const controller = guild.members.cache.get(session.ownerUserId) ?? (await guild.members.fetch(session.ownerUserId).catch(() => null));
     if (!controller || !controller.voice.channelId) {
       return;
     }
@@ -725,26 +738,25 @@ function createBot({ config, store }) {
     }
 
     const guildSettings = await getGuildSettings(guild);
+    session.guildSettingsSnapshot = guildSettings;
+    session.runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings);
+
     if (!memberCanUseVoiceCommands(speaker, session, guildSettings)) {
       return;
     }
 
-    const runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings);
-    if (!runtimeVoiceSettings.transcriptionEnabled) {
+    if (!session.runtimeVoiceSettings.transcriptionEnabled) {
       return;
     }
 
     const now = Date.now();
-    if (now - session.lastCommandAt < runtimeVoiceSettings.commandCooldownMs) {
-      return;
+    const cooldownRemaining = session.lastCommandAt + session.runtimeVoiceSettings.commandCooldownMs - now;
+    if (cooldownRemaining > 0) {
+      await wait(cooldownRemaining);
     }
 
-    const pcmBuffer = await collectPcmBuffer(
-      session.receiver,
-      userId,
-      runtimeVoiceSettings.transcriptionSilenceMs
-    );
-    if (!pcmBuffer.length) {
+    const latestSession = getSession(guild.id);
+    if (!latestSession) {
       return;
     }
 
@@ -754,8 +766,9 @@ function createBot({ config, store }) {
     }
 
     const command = parseVoiceCommand(transcript, {
-      wakeWord: runtimeVoiceSettings.wakeWord,
-      requireWakeWord: runtimeVoiceSettings.requireWakeWord,
+      wakeWord: latestSession.runtimeVoiceSettings?.wakeWord ?? session.runtimeVoiceSettings.wakeWord,
+      requireWakeWord:
+        latestSession.runtimeVoiceSettings?.requireWakeWord ?? session.runtimeVoiceSettings.requireWakeWord,
     });
     if (!command) {
       log(`Ignored transcript from ${speaker.user.tag}: ${transcript}`);
@@ -766,7 +779,7 @@ function createBot({ config, store }) {
       await sendStatus(guild, `Transcript from **${speaker.displayName}**: \`${transcript}\``);
     }
 
-    session.lastCommandAt = Date.now();
+    latestSession.lastCommandAt = Date.now();
     log(`Executing command: ${command.type}`, {
       guild: guild.name,
       speaker: speaker.user.tag,
@@ -776,7 +789,7 @@ function createBot({ config, store }) {
 
     await executeVoiceCommand(
       guild,
-      session,
+      latestSession,
       command,
       transcript,
       guildSettings,
@@ -791,17 +804,15 @@ function createBot({ config, store }) {
       return;
     }
 
-    const nextUserId = session.speechQueue.shift();
-    if (!nextUserId) {
+    const nextJob = session.speechQueue.shift();
+    if (!nextJob) {
       return;
     }
 
-    session.queuedUserIds.delete(nextUserId);
     session.isProcessing = true;
-    session.processingUserId = nextUserId;
 
     try {
-      await processSpeech(guild, nextUserId);
+      await processSpeechJob(guild, nextJob);
     } catch (error) {
       log("Voice command failed", error?.details ?? error);
       await sendStatus(guild, formatUserFacingError(error, "Voice command failed. Please try again."));
@@ -812,7 +823,6 @@ function createBot({ config, store }) {
       }
 
       latestSession.isProcessing = false;
-      latestSession.processingUserId = null;
 
       if (latestSession.speechQueue.length > 0) {
         setImmediate(() => {
@@ -824,28 +834,78 @@ function createBot({ config, store }) {
     }
   }
 
-  function enqueueSpeech(guild, userId) {
+  async function startSpeechCapture(guild, userId) {
     const session = getSession(guild.id);
-    if (!session) {
+    if (!session || session.activeCaptures.has(userId)) {
       return;
     }
 
-    if (session.processingUserId === userId || session.queuedUserIds.has(userId)) {
+    const speaker = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
+    const controller = guild.members.cache.get(session.ownerUserId) ?? (await guild.members.fetch(session.ownerUserId).catch(() => null));
+    if (!speaker || !controller || !controller.voice.channelId) {
       return;
     }
 
-    if (session.speechQueue.length >= 5) {
-      const droppedUserId = session.speechQueue.shift();
-      if (droppedUserId) {
-        session.queuedUserIds.delete(droppedUserId);
+    if (speaker.voice.channelId !== controller.voice.channelId) {
+      return;
+    }
+
+    const guildSettings = session.guildSettingsSnapshot ?? (await getGuildSettings(guild));
+    session.guildSettingsSnapshot = guildSettings;
+    session.runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings);
+
+    if (!memberCanUseVoiceCommands(speaker, session, guildSettings)) {
+      return;
+    }
+
+    if (!session.runtimeVoiceSettings.transcriptionEnabled) {
+      return;
+    }
+
+    session.activeCaptures.add(userId);
+
+    try {
+      const pcmBuffer = await collectPcmBuffer(
+        session.receiver,
+        userId,
+        session.runtimeVoiceSettings.transcriptionSilenceMs
+      );
+
+      if (!pcmBuffer.length) {
+        return;
+      }
+
+      const latestSession = getSession(guild.id);
+      if (!latestSession) {
+        return;
+      }
+
+      if (latestSession.speechQueue.length >= 5) {
+        latestSession.speechQueue.shift();
+      }
+
+      latestSession.speechQueue.push({
+        userId,
+        pcmBuffer,
+        capturedAt: Date.now(),
+      });
+
+      drainSpeechQueue(guild).catch((error) => {
+        log("Queue start failed", error?.details ?? error);
+      });
+    } catch (error) {
+      log("Speech capture failed", error?.details ?? error);
+    } finally {
+      const latestSession = getSession(guild.id);
+      if (latestSession) {
+        latestSession.activeCaptures.delete(userId);
       }
     }
+  }
 
-    session.speechQueue.push(userId);
-    session.queuedUserIds.add(userId);
-
-    drainSpeechQueue(guild).catch((error) => {
-      log("Queue start failed", error?.details ?? error);
+  function enqueueSpeech(guild, userId) {
+    startSpeechCapture(guild, userId).catch((error) => {
+      log("Speech capture start failed", error?.details ?? error);
     });
   }
 
@@ -883,10 +943,11 @@ function createBot({ config, store }) {
       ownerUserId: config.CONTROLLER_USER_ID ?? member.id,
       textChannelId: guildSettings.preferredTextChannelId || textChannel.id,
       isProcessing: false,
-      processingUserId: null,
       speechQueue: [],
-      queuedUserIds: new Set(),
+      activeCaptures: new Set(),
       lastCommandAt: 0,
+      guildSettingsSnapshot: guildSettings,
+      runtimeVoiceSettings: getRuntimeVoiceSettings(guildSettings),
     };
 
     connection.receiver.speaking.on("start", onSpeakingStart);

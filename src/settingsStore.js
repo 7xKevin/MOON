@@ -65,7 +65,7 @@ function normalizeGuildSettings(input = {}, defaults = {}) {
     ),
     commandCooldownMs: normalizePositiveInteger(
       input.commandCooldownMs,
-      defaults.commandCooldownMs ?? 2500
+      defaults.commandCooldownMs ?? 900
     ),
     commandDragEnabled: input.commandDragEnabled !== false,
     commandMuteEnabled: input.commandMuteEnabled !== false,
@@ -188,7 +188,7 @@ class PostgresSettingsStore {
         wake_word TEXT NOT NULL DEFAULT 'moon',
         require_wake_word BOOLEAN NOT NULL DEFAULT TRUE,
         transcription_silence_ms INTEGER NOT NULL DEFAULT 1200,
-        command_cooldown_ms INTEGER NOT NULL DEFAULT 2500,
+        command_cooldown_ms INTEGER NOT NULL DEFAULT 900,
         command_drag_enabled BOOLEAN NOT NULL DEFAULT TRUE,
         command_mute_enabled BOOLEAN NOT NULL DEFAULT TRUE,
         command_kick_enabled BOOLEAN NOT NULL DEFAULT TRUE,
@@ -204,7 +204,7 @@ class PostgresSettingsStore {
       ADD COLUMN IF NOT EXISTS wake_word TEXT NOT NULL DEFAULT 'moon',
       ADD COLUMN IF NOT EXISTS require_wake_word BOOLEAN NOT NULL DEFAULT TRUE,
       ADD COLUMN IF NOT EXISTS transcription_silence_ms INTEGER NOT NULL DEFAULT 1200,
-      ADD COLUMN IF NOT EXISTS command_cooldown_ms INTEGER NOT NULL DEFAULT 2500,
+      ADD COLUMN IF NOT EXISTS command_cooldown_ms INTEGER NOT NULL DEFAULT 900,
       ADD COLUMN IF NOT EXISTS transcription_enabled BOOLEAN NOT NULL DEFAULT TRUE
     `);
   }
@@ -359,3 +359,4 @@ module.exports = {
   normalizeGuildSettings,
   parseStringList,
 };
+
