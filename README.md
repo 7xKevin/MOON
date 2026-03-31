@@ -4,38 +4,28 @@ MOON is a Discord voice-command bot with an admin dashboard.
 
 The repo now supports two runtime modes from the same codebase:
 
-- `bot`: Discord bot worker with voice capture and local Whisper transcription
+- `bot`: Discord bot worker with voice capture and speech transcription
 - `web`: admin dashboard with Discord OAuth login and shared guild settings
 
-## Correct stack
+## Recommended stack
 
-For your original idea, the stack is mostly right. The best practical version is:
+For the hosted version, the best practical stack is:
 
 - `discord.js`
 - `@discordjs/voice`
 - `Node.js`
-- local/offline speech-to-text with `whisper.cpp`
-- `Render` for hosting
+- hosted speech-to-text with `Groq` as the primary provider
+- optional local/offline fallback with `whisper.cpp`
+- `Railway` or `Render` for hosting
 - `Postgres` for shared dashboard and bot settings
-
-`whisper.cpp` is the right local/offline Whisper path for a Node-based Discord bot.
-
-## Architecture
-
-Recommended Render setup:
-
-- `moon-web`: Render web service for the admin dashboard
-- `moon-bot`: Render background worker for the Discord bot
-- `moon-db`: Render Postgres database for shared settings
-
-The included `render.yaml`, `Dockerfile.web`, and `Dockerfile.bot` are set up for that model.
 
 ## Features
 
 ### Bot
 
 - `!join`, `!leave`, `!help`, `!dashboard`
-- local voice transcription with `whisper.cpp`
+- Groq speech-to-text as the primary path
+- optional local `whisper.cpp` fallback
 - voice commands:
   - `drag <name> here`
   - `mute <name>`
@@ -53,11 +43,12 @@ The included `render.yaml`, `Dockerfile.web`, and `Dockerfile.bot` are set up fo
 - lists guilds where the signed-in user has admin-level access
 - per-guild settings for:
   - bot enabled or paused
-  - dashboard admin user IDs
+  - voice decoding enabled or disabled
+  - transcript debugging
+  - wake word and speech timing
   - voice command user IDs
   - voice command role IDs
   - preferred text channel ID
-  - transcript debugging
   - enable or disable drag, mute, kick, and lock commands
 
 ## Environment variables
@@ -74,80 +65,38 @@ Key variables:
 - `DISCORD_CLIENT_ID` for dashboard mode
 - `DISCORD_CLIENT_SECRET` for dashboard mode
 - `SESSION_SECRET` for dashboard mode
-- `DATABASE_URL` for shared Postgres on Render
-- `WHISPER_CPP_PATH` for bot mode
-- `WHISPER_MODEL_PATH` for bot mode
+- `DATABASE_URL` for shared Postgres
+- `GROQ_API_KEY` for Groq speech-to-text
+- `GROQ_STT_MODEL` defaults to `whisper-large-v3-turbo`
+- `GROQ_STT_URL` defaults to `https://api.groq.com/openai/v1/audio/transcriptions`
+- `WHISPER_CPP_PATH` and `WHISPER_MODEL_PATH` are optional local fallback settings
 - `WHISPER_LANGUAGE` defaults to `en`
-- `WHISPER_PROMPT` seeds Whisper with Discord command context
-- `WHISPER_BEAM_SIZE`, `WHISPER_BEST_OF`, and `WHISPER_TEMPERATURE` tune decoding
+- `WHISPER_PROMPT` seeds the transcription model with Discord command context
 
-For Render:
+## Railway deployment
 
-- `moon-web` needs `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `SESSION_SECRET`, and `APP_BASE_URL`
-- `moon-bot` needs `DISCORD_TOKEN` and `APP_BASE_URL`
-- both services should receive `DATABASE_URL`
+For the bot service, set at minimum:
 
-## Local development
+- `DISCORD_TOKEN`
+- `APP_BASE_URL`
+- `DATABASE_URL`
+- `GROQ_API_KEY`
+- `SERVICE_MODE=bot`
 
-### Bot only
+For the web service, set:
 
-```powershell
-npm.cmd start
-```
+- `DISCORD_CLIENT_ID`
+- `DISCORD_CLIENT_SECRET`
+- `SESSION_SECRET`
+- `APP_BASE_URL`
+- `DATABASE_URL`
+- `SERVICE_MODE=web`
 
-Set:
-
-```env
-SERVICE_MODE=bot
-```
-
-### Dashboard only
-
-```powershell
-npm.cmd start
-```
-
-Set:
-
-```env
-SERVICE_MODE=web
-PORT=3000
-APP_BASE_URL=http://localhost:3000
-DISCORD_CLIENT_ID=your_client_id
-DISCORD_CLIENT_SECRET=your_client_secret
-SESSION_SECRET=replace_this
-```
-
-For Discord OAuth, add this redirect URL in the Discord Developer Portal:
-
-```text
-http://localhost:3000/auth/discord/callback
-```
-
-### Both in one local process
-
-```env
-SERVICE_MODE=all
-```
-
-## Render deployment
-
-1. Push this repo to GitHub.
-2. In the Discord Developer Portal, add your Render dashboard callback URL:
-   - `https://your-web-service.onrender.com/auth/discord/callback`
-3. In Render, create from Blueprint using `render.yaml`, or create services manually.
-4. Supply secret environment variables:
-   - `moon-web`: `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `APP_BASE_URL`
-   - `moon-bot`: `DISCORD_TOKEN`, `APP_BASE_URL`
-5. Deploy.
-6. Set `APP_BASE_URL` to the full public dashboard URL for both services, for example:
-   - `https://moon-web.onrender.com`
+If `GROQ_API_KEY` is present, MOON uses Groq first and only falls back to local `whisper.cpp` if Groq fails and local Whisper is available.
 
 ## Notes
 
-- `Dockerfile.bot` installs `whisper.cpp` and downloads the `small.en` model during build.
-- `Dockerfile.web` stays lightweight and does not build the speech stack.
-- MOON now defaults to `small.en` plus an English command prompt, beam search, and deterministic decoding for better command recognition.
-- This improves recognition quality over `base.en` without the heavier memory hit of `medium.en`.
-- The dashboard uses Postgres-backed sessions when `DATABASE_URL` is set.
+- Groq STT uses the OpenAI-compatible transcription endpoint.
+- The bot still converts incoming Discord audio to `16kHz` mono WAV before transcription.
+- Local `whisper.cpp` is still supported as a fallback path, but it is no longer required when Groq is configured.
 - The dashboard exposes `GET /healthz` for a simple health check.

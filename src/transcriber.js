@@ -6,6 +6,13 @@ const ffmpegPath = require("ffmpeg-static");
 const { config } = require("./config");
 const { isWhisperServerReady } = require("./whisperServer");
 
+function createTranscriptionError(message, details, command) {
+  return Object.assign(new Error(message), {
+    details,
+    command,
+  });
+}
+
 function runProcess(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -31,12 +38,7 @@ function runProcess(command, args, options = {}) {
         return;
       }
 
-      reject(
-        Object.assign(new Error("Speech transcription failed."), {
-          command,
-          details: stderr || stdout,
-        })
-      );
+      reject(createTranscriptionError("Speech transcription failed.", stderr || stdout, command));
     });
   });
 }
@@ -64,6 +66,32 @@ async function convertPcmToWav(inputPath, outputPath) {
   ]);
 }
 
+async function transcribeViaGroq(wavPath) {
+  const wavBuffer = await fs.readFile(wavPath);
+  const form = new FormData();
+  form.append("file", new Blob([wavBuffer], { type: "audio/wav" }), "command.wav");
+  form.append("model", config.GROQ_STT_MODEL);
+  form.append("language", config.WHISPER_LANGUAGE);
+  form.append("prompt", config.WHISPER_PROMPT);
+  form.append("temperature", String(config.WHISPER_TEMPERATURE));
+  form.append("response_format", "text");
+
+  const response = await fetch(config.GROQ_STT_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.GROQ_API_KEY}`,
+    },
+    body: form,
+  });
+
+  const body = await response.text();
+  if (!response.ok) {
+    throw createTranscriptionError("Speech transcription failed.", body, config.GROQ_STT_URL);
+  }
+
+  return body.trim();
+}
+
 async function transcribeViaServer(wavPath) {
   const wavBuffer = await fs.readFile(wavPath);
   const form = new FormData();
@@ -81,10 +109,7 @@ async function transcribeViaServer(wavPath) {
 
   const body = await response.text();
   if (!response.ok) {
-    throw Object.assign(new Error("Speech transcription failed."), {
-      details: body,
-      command: config.whisperServerUrl,
-    });
+    throw createTranscriptionError("Speech transcription failed.", body, config.whisperServerUrl);
   }
 
   return body.trim();
@@ -129,6 +154,14 @@ async function transcribePcmBuffer(pcmBuffer) {
     await fs.writeFile(rawPath, pcmBuffer);
     await convertPcmToWav(rawPath, wavPath);
 
+    if (config.hasGroqStt) {
+      try {
+        return await transcribeViaGroq(wavPath);
+      } catch (error) {
+        console.warn("[MOON] Groq transcription failed, falling back.", error?.details ?? error);
+      }
+    }
+
     if (isWhisperServerReady()) {
       try {
         return await transcribeViaServer(wavPath);
@@ -137,7 +170,15 @@ async function transcribePcmBuffer(pcmBuffer) {
       }
     }
 
-    return await runWhisperCpp(wavPath, outputBasePath);
+    if (config.hasLocalWhisper) {
+      return await runWhisperCpp(wavPath, outputBasePath);
+    }
+
+    throw createTranscriptionError(
+      "Speech transcription failed.",
+      "No speech provider is available. Configure GROQ_API_KEY or local whisper.cpp.",
+      "transcriber"
+    );
   } finally {
     await Promise.allSettled([
       fs.unlink(rawPath),

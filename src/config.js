@@ -47,6 +47,9 @@ const schema = z.object({
   DATABASE_URL: optionalString,
   DATA_DIR: z.string().default(path.join(process.cwd(), "data")),
   CONTROLLER_USER_ID: optionalString,
+  GROQ_API_KEY: optionalString,
+  GROQ_STT_MODEL: z.string().default("whisper-large-v3-turbo"),
+  GROQ_STT_URL: z.string().default("https://api.groq.com/openai/v1/audio/transcriptions"),
   WHISPER_CPP_PATH: optionalString,
   WHISPER_MODEL_PATH: optionalString,
   WHISPER_SERVER_PATH: optionalString,
@@ -86,8 +89,15 @@ function requireSetting(key, when) {
 
 if (config.SERVICE_MODE === "bot" || config.SERVICE_MODE === "all") {
   requireSetting("DISCORD_TOKEN", "running the bot");
-  requireSetting("WHISPER_CPP_PATH", "running the bot");
-  requireSetting("WHISPER_MODEL_PATH", "running the bot");
+
+  const hasGroq = Boolean(config.GROQ_API_KEY);
+  const hasLocalWhisper = Boolean(config.WHISPER_CPP_PATH && config.WHISPER_MODEL_PATH);
+
+  if (!hasGroq && !hasLocalWhisper) {
+    throw new Error(
+      "You must configure GROQ_API_KEY or both WHISPER_CPP_PATH and WHISPER_MODEL_PATH when running the bot."
+    );
+  }
 }
 
 if (config.SERVICE_MODE === "web" || config.SERVICE_MODE === "all") {
@@ -105,8 +115,8 @@ module.exports = {
     appBaseUrl,
     oauthRedirectUri: `${appBaseUrl}/auth/discord/callback`,
     whisperServerUrl,
+    hasGroqStt: Boolean(config.GROQ_API_KEY),
+    hasLocalWhisper: Boolean(config.WHISPER_CPP_PATH && config.WHISPER_MODEL_PATH),
     isProduction: process.env.NODE_ENV === "production",
   },
 };
-
-
