@@ -775,7 +775,7 @@ function createBot({ config, store }) {
       return;
     }
 
-    if (config.DEBUG_TRANSCRIPTS || guildSettings.debugTranscripts) {
+    if (guildSettings.debugTranscripts) {
       await sendStatus(guild, `Transcript from **${speaker.displayName}**: \`${transcript}\``);
     }
 
