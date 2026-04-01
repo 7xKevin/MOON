@@ -439,6 +439,11 @@ function createWebApp({ config, store }) {
       nextSettings.guildName = guild.name;
       await store.saveGuildSettings(nextSettings, req.session.user.id);
 
+      if (req.get("x-requested-with") === "fetch" || req.accepts("json") === "json") {
+        res.json({ ok: true, message: "Settings saved." });
+        return;
+      }
+
       res.redirect(`/guilds/${guild.id}?saved=1`);
     } catch (error) {
       next(error);
@@ -447,6 +452,11 @@ function createWebApp({ config, store }) {
 
   app.use((error, req, res, next) => {
     console.error("[MOON] Dashboard error", error);
+
+    if (req.get("x-requested-with") === "fetch" || req.accepts("json") === "json") {
+      res.status(500).json({ ok: false, error: formatDashboardError(error) });
+      return;
+    }
 
     res.status(500).render("home", {
       title: "MOON Control",
@@ -470,6 +480,8 @@ function createWebApp({ config, store }) {
 module.exports = {
   createWebApp,
 };
+
+
 
 
 
