@@ -353,6 +353,10 @@ html[data-theme="dark"] button:hover {
   overflow: hidden;
 }
 
+.landing-page .sidebar {
+  padding-block: 14px;
+}
+
 .landing-page .layout {
   min-height: 100vh;
 }
@@ -361,11 +365,11 @@ html[data-theme="dark"] button:hover {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  padding-bottom: 28px;
+  padding-bottom: 18px;
 }
 
 .landing-page .topbar {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .landing-page .landing-hero {
@@ -375,38 +379,37 @@ html[data-theme="dark"] button:hover {
 }
 
 .landing-badges {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .landing-actions {
-  margin-top: 20px;
+  margin-top: 16px;
 }
 
-.landing-stat-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 22px;
+.landing-highlight-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
 }
 
-.landing-stat {
+.landing-highlight-pill {
   display: grid;
-  gap: 6px;
-  padding: 14px;
-  border-radius: 14px;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 999px;
   border: 1px solid var(--line);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 72%, transparent), transparent),
-    var(--bg-subtle);
+  background: color-mix(in srgb, var(--bg-subtle) 82%, var(--bg-elevated));
 }
 
-.landing-stat strong {
-  font-size: 0.95rem;
+.landing-highlight-pill strong {
+  font-size: 0.9rem;
 }
 
-.landing-stat span {
+.landing-highlight-pill span {
   color: var(--text-muted);
-  font-size: 0.92rem;
+  font-size: 0.86rem;
 }
 
 .landing-inline-info {
@@ -424,10 +427,10 @@ html[data-theme="dark"] button:hover {
 .landing-visual {
   position: relative;
   min-height: 100%;
-  padding: 24px 18px 18px;
+  padding: 18px 18px 20px;
   display: grid;
-  gap: 24px;
-  align-content: space-between;
+  gap: 16px;
+  align-content: center;
   background:
     radial-gradient(circle at top, rgba(88, 101, 242, 0.2), transparent 50%),
     linear-gradient(160deg, color-mix(in srgb, var(--accent) 10%, var(--bg-elevated)) 0%, var(--bg-elevated) 55%);
@@ -435,13 +438,13 @@ html[data-theme="dark"] button:hover {
 
 .landing-orbit {
   position: relative;
-  min-height: 340px;
+  min-height: clamp(260px, 40vh, 320px);
   display: grid;
   place-items: center;
 }
 
 .hero-logo {
-  --logo-size: 148px;
+  --logo-size: clamp(124px, 16vw, 148px);
   z-index: 2;
   animation: moon-hero-float 6.4s ease-in-out infinite;
 }
@@ -517,7 +520,7 @@ html[data-theme="dark"] button:hover {
 .landing-command-chip {
   position: absolute;
   width: max-content;
-  max-width: 220px;
+  max-width: 200px;
   padding: 10px 12px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
@@ -530,25 +533,25 @@ html[data-theme="dark"] button:hover {
 }
 
 .chip-top-left {
-  top: 18px;
-  left: 10px;
+  top: 46px;
+  left: 18px;
 }
 
 .chip-top-right {
-  top: 54px;
-  right: 6px;
+  top: 76px;
+  right: 14px;
   animation-delay: 0.8s;
 }
 
 .chip-bottom-left {
-  left: 20px;
-  bottom: 52px;
+  left: 28px;
+  bottom: 68px;
   animation-delay: 1.6s;
 }
 
 .chip-bottom-right {
-  right: 4px;
-  bottom: 26px;
+  right: 18px;
+  bottom: 44px;
   animation-delay: 2.4s;
 }
 
@@ -741,9 +744,12 @@ textarea {
 
   .landing-hero,
   .landing-grid,
-  .landing-stat-row,
   .landing-inline-info {
     grid-template-columns: 1fr;
+  }
+
+  .landing-highlight-row {
+    flex-direction: column;
   }
 
   .landing-page {
@@ -1122,6 +1128,7 @@ body.modal-open {
   max-height: min(78vh, 900px);
   overflow: auto;
   padding: 20px;
+  outline: none;
   border-radius: 18px;
   border: 1px solid var(--line);
   background: var(--bg-elevated);
@@ -1152,5 +1159,19 @@ body.modal-open {
   .modal-header {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+
+@media (min-width: 901px) {
+  .landing-page .landing-copy .card-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 100%;
+  }
+
+  .landing-page .landing-lead {
+    font-size: 0.98rem;
   }
 }

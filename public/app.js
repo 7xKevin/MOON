@@ -1,5 +1,6 @@
 (function () {
   let navigationInFlight = false;
+  let modalLastFocused = null;
 
   function ensureToastStack() {
     let stack = document.querySelector('[data-toast-stack]');
@@ -60,6 +61,25 @@
     return document.querySelector('[data-command-modal]');
   }
 
+  function getCommandModalSheet() {
+    return document.querySelector('[data-command-modal] .modal-sheet');
+  }
+
+  function getModalFocusableElements() {
+    const modal = getCommandModal();
+    if (!modal) {
+      return [];
+    }
+
+    return Array.from(
+      modal.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter(function (element) {
+      return !element.hidden && element.offsetParent !== null;
+    });
+  }
+
   function closeCommandModal() {
     const modal = getCommandModal();
     if (!modal) {
@@ -73,6 +93,11 @@
         modal.hidden = true;
       }
     }, 180);
+
+    if (modalLastFocused && typeof modalLastFocused.focus === 'function') {
+      modalLastFocused.focus();
+    }
+    modalLastFocused = null;
   }
 
   function openCommandModal() {
@@ -81,10 +106,13 @@
       return;
     }
 
+    modalLastFocused = document.activeElement;
     modal.hidden = false;
     requestAnimationFrame(function () {
       modal.classList.add('is-visible');
       document.body.classList.add('modal-open');
+      const firstFocusable = getModalFocusableElements()[0] || getCommandModalSheet();
+      firstFocusable?.focus?.();
     });
   }
 
@@ -147,7 +175,38 @@
     return parser.parseFromString(html, 'text/html');
   }
 
-  function replacePageContent(nextDocument) {
+  function syncBodyState(nextDocument) {
+    document.body.className = nextDocument.body.className || '';
+    document.body.classList.remove('page-ready', 'page-leaving', 'modal-open');
+  }
+
+  async function ensureDocumentScripts(nextDocument) {
+    const nextScripts = Array.from(nextDocument.querySelectorAll('script[src]'));
+
+    for (const nextScript of nextScripts) {
+      const source = new URL(nextScript.getAttribute('src'), window.location.href).href;
+      const existing = Array.from(document.querySelectorAll('script[src]')).some(function (script) {
+        return new URL(script.getAttribute('src'), window.location.href).href === source;
+      });
+
+      if (existing) {
+        continue;
+      }
+
+      await new Promise(function (resolve, reject) {
+        const script = document.createElement('script');
+        script.src = source;
+        if (nextScript.defer) {
+          script.defer = true;
+        }
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+  }
+
+  async function replacePageContent(nextDocument) {
     const nextLayout = nextDocument.querySelector('.layout');
     const currentLayout = document.querySelector('.layout');
 
@@ -155,9 +214,11 @@
       throw new Error('Could not update page layout.');
     }
 
+    closeCommandModal();
     document.title = nextDocument.title;
-    document.body.classList.remove('page-ready');
+    syncBodyState(nextDocument);
     currentLayout.replaceWith(nextLayout);
+    await ensureDocumentScripts(nextDocument);
     runPageInitializers();
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     markPageReady();
@@ -175,7 +236,7 @@
 
     try {
       const nextDocument = await fetchDocument(url);
-      replacePageContent(nextDocument);
+      await replacePageContent(nextDocument);
       if (settings.pushState) {
         window.history.pushState({}, '', url);
       }
@@ -234,8 +295,38 @@
   });
 
   document.addEventListener('keydown', function (event) {
+    const modal = getCommandModal();
+    if (!modal || modal.hidden || !modal.classList.contains('is-visible')) {
+      return;
+    }
+
     if (event.key === 'Escape') {
       closeCommandModal();
+      return;
+    }
+
+    if (event.key !== 'Tab') {
+      return;
+    }
+
+    const focusable = getModalFocusableElements();
+    if (!focusable.length) {
+      event.preventDefault();
+      getCommandModalSheet()?.focus?.();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+      return;
+    }
+
+    if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
     }
   });
 
@@ -248,4 +339,3 @@
     closeCommandModal,
   };
 })();
-
