@@ -204,6 +204,17 @@ function scoreChannelName(candidate, lookup) {
     return 1;
   }
 
+  const candidateTokens = normalizedCandidate.split(" ").filter(Boolean);
+  const lookupTokens = normalizedLookup.split(" ").filter(Boolean);
+
+  if (lookupTokens.length && lookupTokens.every((token) => candidateTokens.includes(token))) {
+    return 0.97;
+  }
+
+  if (candidateTokens.length && candidateTokens.every((token) => lookupTokens.includes(token))) {
+    return 0.91;
+  }
+
   if (
     compactCandidate.startsWith(compactLookup) ||
     compactLookup.startsWith(compactCandidate)
@@ -227,15 +238,23 @@ function scoreChannelName(candidate, lookup) {
   return similarityScore(normalizedCandidate, normalizedLookup);
 }
 
-async function findVoiceChannelByName(guild, rawName) {
-  const channels = guild.channels.cache.filter(
-    (channel) => channel.type === ChannelType.GuildVoice
-  );
+function isVoiceLikeChannel(channel) {
+  if (!channel) {
+    return false;
+  }
 
+  return channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildStageVoice;
+}
+
+function rankVoiceChannelMatches(channels, rawName) {
   let best = null;
   let second = null;
 
   for (const channel of channels.values()) {
+    if (!isVoiceLikeChannel(channel)) {
+      continue;
+    }
+
     const score = scoreChannelName(channel.name, rawName);
     if (score < 0) {
       continue;
@@ -247,6 +266,19 @@ async function findVoiceChannelByName(guild, rawName) {
       best = candidate;
     } else if (!second || score > second.score) {
       second = candidate;
+    }
+  }
+
+  return { best, second };
+}
+
+async function findVoiceChannelByName(guild, rawName) {
+  let { best, second } = rankVoiceChannelMatches(guild.channels.cache, rawName);
+
+  if (!best || best.score < 0.9) {
+    const fetchedChannels = await guild.channels.fetch().catch(() => null);
+    if (fetchedChannels?.size) {
+      ({ best, second } = rankVoiceChannelMatches(fetchedChannels, rawName));
     }
   }
 
@@ -561,3 +593,4 @@ module.exports = {
   resolveCommandTargets,
   uniqueMembers,
 };
+
