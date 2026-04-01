@@ -88,6 +88,10 @@ code {
   border-radius: var(--radius-sm);
 }
 
+.brand-logo {
+  flex: 0 0 auto;
+}
+
 .brand-mark {
   width: 34px;
   height: 34px;
@@ -107,6 +111,61 @@ code {
 
 .brand-copy strong {
   font-size: 0.98rem;
+}
+
+.moon-logo {
+  --logo-size: 34px;
+  position: relative;
+  width: var(--logo-size);
+  height: var(--logo-size);
+  display: inline-block;
+  border-radius: 999px;
+}
+
+.moon-logo-ring,
+.moon-logo-core,
+.moon-logo-orbit {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+}
+
+.moon-logo-ring {
+  background:
+    radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0) 38%),
+    linear-gradient(145deg, #7f8cff 0%, var(--accent) 58%, #3845bf 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 10px 24px rgba(88, 101, 242, 0.28);
+}
+
+.moon-logo-core {
+  inset: 7px;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 45%),
+    linear-gradient(160deg, #10142f 0%, #20294e 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.moon-logo-orbit {
+  inset: auto;
+  background: linear-gradient(160deg, #ffe8a3 0%, #ffbf47 100%);
+  box-shadow: 0 4px 12px rgba(255, 191, 71, 0.35);
+}
+
+.moon-logo-orbit-one {
+  width: 10px;
+  height: 10px;
+  top: 2px;
+  right: 4px;
+}
+
+.moon-logo-orbit-two {
+  width: 7px;
+  height: 7px;
+  bottom: 3px;
+  left: 2px;
+  opacity: 0.92;
 }
 
 .brand-copy span,
@@ -233,6 +292,21 @@ html[data-theme="dark"] button:hover {
   margin-bottom: 18px;
 }
 
+.landing-hero,
+.landing-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.landing-hero {
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  margin-bottom: 18px;
+}
+
+.landing-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .card {
   background: var(--bg-elevated);
   border: 1px solid var(--line);
@@ -261,6 +335,145 @@ html[data-theme="dark"] button:hover {
   margin: 10px 0 10px;
   font-size: clamp(1.9rem, 3vw, 2.6rem);
   line-height: 1.05;
+}
+
+.landing-copy .headline {
+  max-width: 12ch;
+}
+
+.landing-lead {
+  max-width: 62ch;
+}
+
+.landing-panel {
+  overflow: hidden;
+}
+
+.landing-badges {
+  margin-bottom: 12px;
+}
+
+.landing-actions {
+  margin-top: 20px;
+}
+
+.landing-stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.landing-stat {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 72%, transparent), transparent),
+    var(--bg-subtle);
+}
+
+.landing-stat strong {
+  font-size: 0.95rem;
+}
+
+.landing-stat span {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.landing-visual-shell {
+  position: relative;
+  isolation: isolate;
+}
+
+.landing-visual {
+  position: relative;
+  min-height: 100%;
+  padding: 24px 18px 18px;
+  display: grid;
+  gap: 24px;
+  align-content: space-between;
+  background:
+    radial-gradient(circle at top, rgba(88, 101, 242, 0.2), transparent 50%),
+    linear-gradient(160deg, color-mix(in srgb, var(--accent) 10%, var(--bg-elevated)) 0%, var(--bg-elevated) 55%);
+}
+
+.landing-orbit {
+  position: relative;
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+}
+
+.hero-logo {
+  --logo-size: 148px;
+  z-index: 2;
+}
+
+.hero-logo .moon-logo-core {
+  inset: 28px;
+}
+
+.hero-logo .moon-logo-orbit-one {
+  width: 26px;
+  height: 26px;
+  top: 10px;
+  right: 18px;
+}
+
+.hero-logo .moon-logo-orbit-two {
+  width: 18px;
+  height: 18px;
+  bottom: 14px;
+  left: 12px;
+}
+
+.landing-orbit-glow {
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(88, 101, 242, 0.3) 0%, rgba(88, 101, 242, 0.08) 42%, transparent 72%);
+  filter: blur(10px);
+}
+
+.landing-command-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.landing-command-chip {
+  width: fit-content;
+  max-width: 100%;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  background: color-mix(in srgb, var(--bg-subtle) 82%, var(--bg-elevated));
+  color: var(--text);
+  font-family: "Consolas", "SFMono-Regular", monospace;
+  font-size: 0.92rem;
+  box-shadow: var(--shadow);
+}
+
+.landing-command-chip:nth-child(2n) {
+  justify-self: end;
+}
+
+.landing-list {
+  display: grid;
+  gap: 12px;
+}
+
+.landing-list-item {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg-subtle);
 }
 
 .section-title {
@@ -435,6 +648,12 @@ textarea {
   .hero {
     grid-template-columns: 1fr;
   }
+
+  .landing-hero,
+  .landing-grid,
+  .landing-stat-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -461,6 +680,14 @@ textarea {
   .stat-grid,
   .quick-grid {
     grid-template-columns: 1fr;
+  }
+
+  .hero-logo {
+    --logo-size: 112px;
+  }
+
+  .landing-copy .headline {
+    max-width: none;
   }
 }
 

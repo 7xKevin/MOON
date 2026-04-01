@@ -12,10 +12,15 @@
     <div class="layout">
       <aside class="sidebar">
         <a class="brand" href="/">
-          <span class="brand-mark">M</span>
+          <span class="moon-logo brand-logo" aria-hidden="true">
+            <span class="moon-logo-ring"></span>
+            <span class="moon-logo-core"></span>
+            <span class="moon-logo-orbit moon-logo-orbit-one"></span>
+            <span class="moon-logo-orbit moon-logo-orbit-two"></span>
+          </span>
           <span class="brand-copy">
             <strong>MOON Control</strong>
-            <span>Admin console</span>
+            <span>Voice command system</span>
           </span>
         </a>
 
@@ -33,8 +38,8 @@
       <main class="main">
         <header class="topbar">
           <div>
-            <h1 class="page-title">Control panel</h1>
-            <div class="meta">Manage who can use MOON and what it can do.</div>
+            <h1 class="page-title">MOON</h1>
+            <div class="meta">Deterministic voice control for Discord servers.</div>
           </div>
           <div class="actions">
             <button class="theme-toggle" type="button" data-theme-toggle>
@@ -53,52 +58,124 @@
           <div class="notice error"><%= error %></div>
         <% } %>
 
-        <section class="hero">
-          <article class="card">
+        <section class="landing-hero">
+          <article class="card landing-panel landing-copy">
             <div class="card-body">
-              <span class="eyebrow">MOON Dashboard</span>
-              <h2 class="headline">Simple controls for a voice bot that can do real damage.</h2>
-              <p class="section-lead">
-                Keep the bot usable without letting the server turn into chaos. Admins can choose who
-                gets voice-command access and disable sensitive actions like <code>kick</code> or
-                <code>lock</code> per server.
+              <div class="badge-row landing-badges">
+                <span class="eyebrow">MOON Voice Control</span>
+                <span class="badge live">Deterministic commands</span>
+                <span class="badge">Groq Whisper STT</span>
+              </div>
+              <h2 class="headline">A fast voice-command system for Discord that stays predictable under pressure.</h2>
+              <p class="section-lead landing-lead">
+                MOON turns short spoken commands into reliable moderation actions without fuzzy AI intent
+                guessing. Admins decide exactly who can speak, which actions are allowed, and how each guild
+                should behave.
               </p>
-              <div class="inline-actions">
+              <div class="inline-actions landing-actions">
                 <% if (loggedIn) { %>
                   <a class="button primary" href="/dashboard">Open Dashboard</a>
                 <% } else { %>
                   <a class="button primary" href="/login">Connect Discord</a>
                 <% } %>
+                <a class="button" href="#command-system">See How It Works</a>
+              </div>
+              <div class="landing-stat-row">
+                <div class="landing-stat">
+                  <strong>Shared command set</strong>
+                  <span>Short global commands users can learn once and repeat anywhere.</span>
+                </div>
+                <div class="landing-stat">
+                  <strong>Per-guild controls</strong>
+                  <span>Wake word, access rules, and action toggles stay in your dashboard.</span>
+                </div>
+                <div class="landing-stat">
+                  <strong>Live moderation</strong>
+                  <span>Move, mute, disconnect, lock, and role-manage without typing mid-game.</span>
+                </div>
               </div>
             </div>
           </article>
 
-          <aside class="card">
-            <div class="card-body stack">
-              <div>
-                <h2 class="section-title">What it handles</h2>
-                <p class="section-lead">Minimal dashboard, shared rules, and live bot controls.</p>
+          <aside class="card landing-panel landing-visual-shell">
+            <div class="card-body landing-visual">
+              <div class="landing-orbit">
+                <span class="moon-logo hero-logo" aria-hidden="true">
+                  <span class="moon-logo-ring"></span>
+                  <span class="moon-logo-core"></span>
+                  <span class="moon-logo-orbit moon-logo-orbit-one"></span>
+                  <span class="moon-logo-orbit moon-logo-orbit-two"></span>
+                </span>
+                <div class="landing-orbit-glow"></div>
               </div>
-              <div class="quick-grid">
-                <div class="quick-item">
-                  <strong>Access</strong>
-                  <span class="muted">Allow by user ID or role ID.</span>
-                </div>
-                <div class="quick-item">
-                  <strong>Safety</strong>
-                  <span class="muted">Toggle drag, mute, kick, and lock.</span>
-                </div>
-                <div class="quick-item">
-                  <strong>Status</strong>
-                  <span class="muted">Pause the bot per guild.</span>
-                </div>
-                <div class="quick-item">
-                  <strong>Deploy</strong>
-                  <span class="muted">Works as Render web + worker.</span>
-                </div>
+              <div class="landing-command-stack">
+                <div class="landing-command-chip">moon lock vc</div>
+                <div class="landing-command-chip">moon mute me</div>
+                <div class="landing-command-chip">moon drag aditya here</div>
+                <div class="landing-command-chip">moon disconnect all</div>
               </div>
             </div>
           </aside>
+        </section>
+
+        <section class="landing-grid" id="command-system">
+          <article class="card">
+            <div class="card-body stack">
+              <div>
+                <span class="eyebrow">Why it works</span>
+                <h2 class="section-title" style="margin-top: 10px;">Built for noisy real-time voice channels</h2>
+                <p class="section-lead">
+                  MOON keeps the command system short and repeatable, then matches the transcript against a
+                  fixed command list instead of trying to understand free-form speech.
+                </p>
+              </div>
+              <div class="quick-grid">
+                <div class="quick-item">
+                  <strong>Transcribe</strong>
+                  <span class="muted">Groq Whisper Large v3 converts voice to text.</span>
+                </div>
+                <div class="quick-item">
+                  <strong>Match</strong>
+                  <span class="muted">Deterministic similarity matching chooses only known commands.</span>
+                </div>
+                <div class="quick-item">
+                  <strong>Resolve</strong>
+                  <span class="muted">Users, channels, and roles are matched against live guild data.</span>
+                </div>
+                <div class="quick-item">
+                  <strong>Execute</strong>
+                  <span class="muted">Discord actions run in a safe, predictable order.</span>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-body stack">
+              <div>
+                <span class="eyebrow">What admins control</span>
+                <h2 class="section-title" style="margin-top: 10px;">Everything that matters stays in your hands</h2>
+              </div>
+              <div class="landing-list">
+                <div class="landing-list-item">
+                  <strong>Access rules</strong>
+                  <span class="muted">Allow commands by Discord admin, user ID, or role ID.</span>
+                </div>
+                <div class="landing-list-item">
+                  <strong>Voice behavior</strong>
+                  <span class="muted">Set wake word, silence cutoff, cooldown, and transcript visibility.</span>
+                </div>
+                <div class="landing-list-item">
+                  <strong>Command safety</strong>
+                  <span class="muted">Toggle drag, mute, disconnect, and lock actions per guild.</span>
+                </div>
+                <div class="landing-list-item">
+                  <strong>Deterministic learning</strong>
+                  <span class="muted">Users see the same command catalog in Discord and on the website.</span>
+                </div>
+              </div>
+            </div>
+          </article>
         </section>
       </main>
     </div>
