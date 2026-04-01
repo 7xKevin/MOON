@@ -66,53 +66,47 @@ async function convertPcmToWav(inputPath, outputPath) {
   ]);
 }
 
-async function transcribeViaGroq(wavPath) {
+async function buildAudioFormData(wavPath, model) {
   const wavBuffer = await fs.readFile(wavPath);
   const form = new FormData();
   form.append("file", new Blob([wavBuffer], { type: "audio/wav" }), "command.wav");
-  form.append("model", config.GROQ_STT_MODEL);
+  form.append("model", model);
   form.append("language", config.WHISPER_LANGUAGE);
   form.append("prompt", config.WHISPER_PROMPT);
   form.append("temperature", String(config.WHISPER_TEMPERATURE));
   form.append("response_format", "text");
+  return form;
+}
 
-  const response = await fetch(config.GROQ_STT_URL, {
+async function transcribeViaHttpEndpoint(url, wavPath, options = {}) {
+  const form = await buildAudioFormData(wavPath, options.model);
+  const response = await fetch(url, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.GROQ_API_KEY}`,
-    },
+    headers: options.headers,
     body: form,
   });
 
   const body = await response.text();
   if (!response.ok) {
-    throw createTranscriptionError("Speech transcription failed.", body, config.GROQ_STT_URL);
+    throw createTranscriptionError("Speech transcription failed.", body, url);
   }
 
   return body.trim();
 }
 
-async function transcribeViaServer(wavPath) {
-  const wavBuffer = await fs.readFile(wavPath);
-  const form = new FormData();
-  form.append("file", new Blob([wavBuffer], { type: "audio/wav" }), "command.wav");
-  form.append("model", "whisper-1");
-  form.append("language", config.WHISPER_LANGUAGE);
-  form.append("prompt", config.WHISPER_PROMPT);
-  form.append("temperature", String(config.WHISPER_TEMPERATURE));
-  form.append("response_format", "text");
-
-  const response = await fetch(config.whisperServerUrl, {
-    method: "POST",
-    body: form,
+async function transcribeViaGroq(wavPath) {
+  return transcribeViaHttpEndpoint(config.GROQ_STT_URL, wavPath, {
+    model: config.GROQ_STT_MODEL,
+    headers: {
+      Authorization: `Bearer ${config.GROQ_API_KEY}`,
+    },
   });
+}
 
-  const body = await response.text();
-  if (!response.ok) {
-    throw createTranscriptionError("Speech transcription failed.", body, config.whisperServerUrl);
-  }
-
-  return body.trim();
+async function transcribeViaServer(wavPath) {
+  return transcribeViaHttpEndpoint(config.whisperServerUrl, wavPath, {
+    model: "whisper-1",
+  });
 }
 
 async function runWhisperCpp(wavPath, outputBasePath) {
@@ -140,6 +134,19 @@ async function runWhisperCpp(wavPath, outputBasePath) {
   const transcriptPath = `${outputBasePath}.txt`;
   const transcript = await fs.readFile(transcriptPath, "utf8");
   return transcript.trim();
+}
+
+async function cleanupTranscriptionFiles(rawPath, wavPath, outputBasePath) {
+  await Promise.allSettled([
+    fs.unlink(rawPath),
+    fs.unlink(wavPath),
+    fs.unlink(`${outputBasePath}.txt`),
+    fs.unlink(`${outputBasePath}.json`),
+    fs.unlink(`${outputBasePath}.srt`),
+    fs.unlink(`${outputBasePath}.vtt`),
+    fs.unlink(`${outputBasePath}.csv`),
+    fs.unlink(`${outputBasePath}.wts`),
+  ]);
 }
 
 async function transcribePcmBuffer(pcmBuffer) {
@@ -180,16 +187,7 @@ async function transcribePcmBuffer(pcmBuffer) {
       "transcriber"
     );
   } finally {
-    await Promise.allSettled([
-      fs.unlink(rawPath),
-      fs.unlink(wavPath),
-      fs.unlink(`${outputBasePath}.txt`),
-      fs.unlink(`${outputBasePath}.json`),
-      fs.unlink(`${outputBasePath}.srt`),
-      fs.unlink(`${outputBasePath}.vtt`),
-      fs.unlink(`${outputBasePath}.csv`),
-      fs.unlink(`${outputBasePath}.wts`),
-    ]);
+    await cleanupTranscriptionFiles(rawPath, wavPath, outputBasePath);
   }
 }
 
