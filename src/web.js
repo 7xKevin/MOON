@@ -129,7 +129,7 @@ async function fetchDiscordResource(pathname, accessToken) {
 }
 
 function requireAuth(req, res, next) {
-  if (!req.session.user) {
+  if (!req.session?.user) {
     res.redirect("/");
     return;
   }
@@ -142,6 +142,10 @@ function parseBoolean(value) {
 }
 
 function ensureCsrfToken(req) {
+  if (!req.session) {
+    return "";
+  }
+
   if (!req.session.csrfToken) {
     req.session.csrfToken = crypto.randomBytes(24).toString("hex");
   }
@@ -150,7 +154,7 @@ function ensureCsrfToken(req) {
 }
 
 function requireCsrf(req, res, next) {
-  if (!req.session?.csrfToken || req.body.csrfToken !== req.session.csrfToken) {
+  if (!req.session?.csrfToken || req.body?.csrfToken !== req.session.csrfToken) {
     res.status(403).send("Invalid CSRF token.");
     return;
   }

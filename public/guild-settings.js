@@ -113,13 +113,19 @@
       setSavingState(true);
 
       try {
+        const formData = new FormData(form);
+        const body = new URLSearchParams();
+        for (const [key, value] of formData.entries()) {
+          body.append(key, value);
+        }
+
         const response = await fetch(form.action, {
           method: form.method || 'POST',
           headers: {
             Accept: 'application/json',
             'X-Requested-With': 'fetch',
           },
-          body: new FormData(form),
+          body,
         });
 
         if (!response.ok) {
