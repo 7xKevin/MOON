@@ -7,7 +7,7 @@ const {
   joinVoiceChannel,
 } = require("@discordjs/voice");
 const prism = require("prism-media");
-const { parseVoiceCommand } = require("./commandParser");
+const { getGuildInterpreterContext, interpretVoiceCommand } = require("./commandInterpreter");
 const { transcribePcmBuffer } = require("./transcriber");
 const {
   findRoleByName,
@@ -617,10 +617,11 @@ function createBot({ config, store }) {
       return;
     }
 
-    const command = parseVoiceCommand(transcript, {
+    const command = await interpretVoiceCommand(transcript, {
       wakeWord: latestSession.runtimeVoiceSettings?.wakeWord ?? session.runtimeVoiceSettings.wakeWord,
       requireWakeWord:
         latestSession.runtimeVoiceSettings?.requireWakeWord ?? session.runtimeVoiceSettings.requireWakeWord,
+      context: getGuildInterpreterContext(guild, speaker, controller),
     });
     if (!command) {
       log(`Ignored transcript from ${speaker.user.tag}: ${transcript}`);

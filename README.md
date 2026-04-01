@@ -63,6 +63,9 @@ Key variables:
 - `GROQ_API_KEY` for Groq speech-to-text
 - `GROQ_STT_MODEL` defaults to `whisper-large-v3`
 - `GROQ_STT_URL` defaults to `https://api.groq.com/openai/v1/audio/transcriptions`
+- `GROQ_COMMAND_MODEL` defaults to `llama-3.3-70b-versatile` for AI command interpretation
+- `GROQ_COMMAND_URL` defaults to `https://api.groq.com/openai/v1/chat/completions`
+- `AI_COMMAND_INTERPRETER_ENABLED=true` makes Groq interpret noisy transcripts into structured commands before execution
 - `WHISPER_CPP_PATH` and `WHISPER_MODEL_PATH` are optional local fallback settings
 - `WHISPER_LANGUAGE` defaults to `en`
 - `WHISPER_PROMPT` seeds the transcription model with Discord command context
@@ -95,6 +98,7 @@ If `GROQ_API_KEY` is present, MOON uses Groq first and only falls back to local 
 ## Notes
 
 - Groq STT uses the OpenAI-compatible transcription endpoint.
+- Groq also now acts as the primary command interpreter for noisy transcripts, with the legacy parser kept only as a safety fallback if the AI step fails.
 - The bot converts incoming Discord audio to `16kHz` mono WAV before transcription.
 - The current latency-focused hot path reduces disk I/O for Groq by converting PCM to WAV in memory and dropping stale queue items early.
 - Local `whisper.cpp` is still supported as a fallback path, but it is no longer required when Groq is configured.
