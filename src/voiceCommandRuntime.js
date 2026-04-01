@@ -74,10 +74,10 @@ function getTargetConfidenceFloor(commandType) {
 function getRuntimeVoiceSettings(guildSettings, config) {
   const configuredCooldownMs = guildSettings.commandCooldownMs || config.COMMAND_COOLDOWN_MS;
   const configuredSilenceMs = guildSettings.transcriptionSilenceMs || config.TRANSCRIPTION_SILENCE_MS;
-  const commandCooldownMs = configuredCooldownMs === 2500 || configuredCooldownMs === 900
+  const commandCooldownMs = configuredCooldownMs === 2500 || configuredCooldownMs === 900 || configuredCooldownMs === 400
     ? config.COMMAND_COOLDOWN_MS
     : configuredCooldownMs;
-  const transcriptionSilenceMs = configuredSilenceMs === 1200
+  const transcriptionSilenceMs = configuredSilenceMs === 1200 || configuredSilenceMs === 650
     ? config.TRANSCRIPTION_SILENCE_MS
     : configuredSilenceMs;
 
@@ -118,4 +118,3 @@ module.exports = {
   shouldDiscardPcmBuffer,
   shouldPostTranscripts,
 };
-

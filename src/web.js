@@ -5,6 +5,7 @@ const session = require("express-session");
 const pgSession = require("connect-pg-simple");
 const helmet = require("helmet");
 const { PermissionsBitField } = require("discord.js");
+const { getGlobalVoiceCommandCatalog } = require("./commandParser");
 const { createDefaultGuildSettings, normalizeGuildSettings, parseStringList } = require("./settingsStore");
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
@@ -417,6 +418,7 @@ function createWebApp({ config, store }) {
         saved: req.query.saved === "1",
         settings,
         defaultSettings: createDefaultGuildSettings(guild.id, guild.name),
+        globalCommandCatalog: getGlobalVoiceCommandCatalog(),
       });
     } catch (error) {
       next(error);
@@ -468,6 +470,9 @@ function createWebApp({ config, store }) {
 module.exports = {
   createWebApp,
 };
+
+
+
 
 
 

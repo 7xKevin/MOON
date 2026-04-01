@@ -58,13 +58,13 @@ const schema = z.object({
   WHISPER_LANGUAGE: z.string().default("en"),
   WHISPER_PROMPT: z
     .string()
-    .default("Short deterministic Discord voice commands only. Examples: lock vc, unlock vc, mute me, mute aditya, unmute aditya, kick aditya, drag me here, drag me to general, drag aditya to waiting room, drag all from general to admin, role add aditya role moderator, role remove aditya role moderator. Ignore unrelated conversation."),
+    .default("Short deterministic Discord voice commands only. Examples: lock vc, unlock vc, mute me, mute aditya, unmute aditya, disconnect me, disconnect aditya, disconnect all, drag me here, drag me to general, drag aditya to waiting room, drag all from general to admin, role add aditya role moderator, role remove aditya role moderator. Ignore unrelated conversation."),
   WHISPER_BEAM_SIZE: z.coerce.number().int().positive().default(5),
   WHISPER_BEST_OF: z.coerce.number().int().positive().default(5),
   WHISPER_TEMPERATURE: z.coerce.number().min(0).max(1).default(0),
   TEMP_DIR: z.string().default(path.join(process.cwd(), "tmp")),
-  TRANSCRIPTION_SILENCE_MS: z.coerce.number().int().positive().default(650),
-  COMMAND_COOLDOWN_MS: z.coerce.number().int().nonnegative().default(400),
+  TRANSCRIPTION_SILENCE_MS: z.coerce.number().int().positive().default(550),
+  COMMAND_COOLDOWN_MS: z.coerce.number().int().nonnegative().default(250),
   DEBUG_TRANSCRIPTS: booleanFromEnv.default(false),
   MIN_COMMAND_AUDIO_MS: z.coerce.number().int().positive().default(320),
   MAX_QUEUED_COMMAND_AGE_MS: z.coerce.number().int().positive().default(4500),
@@ -130,6 +130,7 @@ module.exports = {
     isProduction: process.env.NODE_ENV === "production",
   },
 };
+
 
 
 

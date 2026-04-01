@@ -43,7 +43,7 @@ For the hosted version, the best practical stack is:
   - voice command user IDs
   - voice command role IDs
   - preferred text channel ID
-  - enable or disable drag, mute, kick, and lock commands
+  - enable or disable drag, mute, disconnect, and lock commands
 
 ## Environment variables
 
@@ -54,7 +54,7 @@ Key variables:
 - `SERVICE_MODE=bot|web|all`
 - `HOST` defaults to `::` for Railway-compatible binding
 - `WAKE_WORD` defaults to `moon`
-- `REQUIRE_WAKE_WORD=true` makes commands require phrases like `moon lock the vc`
+- `REQUIRE_WAKE_WORD=true` makes commands require phrases like `moon lock vc`
 - `DISCORD_TOKEN` for bot mode
 - `DISCORD_CLIENT_ID` for dashboard mode
 - `DISCORD_CLIENT_SECRET` for dashboard mode
@@ -66,8 +66,8 @@ Key variables:
 - `WHISPER_CPP_PATH` and `WHISPER_MODEL_PATH` are optional local fallback settings
 - `WHISPER_LANGUAGE` defaults to `en`
 - `WHISPER_PROMPT` seeds the transcription model with Discord command context
-- `TRANSCRIPTION_SILENCE_MS` defaults to `650` for faster phrase cutoff
-- `COMMAND_COOLDOWN_MS` defaults to `400` for quicker back-to-back commands
+- `TRANSCRIPTION_SILENCE_MS` defaults to `550` for faster phrase cutoff
+- `COMMAND_COOLDOWN_MS` defaults to `250` for quicker back-to-back commands
 - `MIN_COMMAND_AUDIO_MS` defaults to `320` to drop obviously too-short clips early
 - `MAX_QUEUED_COMMAND_AGE_MS` defaults to `4500` to discard stale queued audio
 
@@ -99,6 +99,9 @@ If `GROQ_API_KEY` is present, MOON uses Groq first and only falls back to local 
 - The current latency-focused hot path reduces disk I/O for Groq by converting PCM to WAV in memory and dropping stale queue items early.
 - Local `whisper.cpp` is still supported as a fallback path, but it is no longer required when Groq is configured.
 - The dashboard exposes `GET /healthz` for a simple health check.
+
+
+
 
 
 

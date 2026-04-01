@@ -553,3 +553,22 @@ button.success:hover {
     bottom: 14px;
   }
 }
+
+.command-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.command-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--bg-subtle);
+}
+
+.command-card code {
+  width: fit-content;
+}

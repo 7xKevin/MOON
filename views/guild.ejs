@@ -130,6 +130,19 @@
               </section>
 
               <section class="form-section">
+                <h3 class="section-title">Global voice commands</h3>
+                <p class="section-lead">These are the same short deterministic commands MOON posts in Discord when you use <code>!join</code>. Learn them here and repeat the same command shapes in voice chat.</p>
+                <div class="command-grid">
+                  <% globalCommandCatalog.forEach((command) => { %>
+                    <article class="command-card">
+                      <code><%= settings.requireWakeWord ? settings.wakeWord + ' ' + command.syntax : command.syntax %></code>
+                      <span class="field-help"><%= command.description %></span>
+                    </article>
+                  <% }) %>
+                </div>
+              </section>
+
+              <section class="form-section">
                 <h3 class="section-title">Access</h3>
                 <div class="field-grid">
                   <label>
@@ -223,3 +236,4 @@
     </div>
   </body>
 </html>
+

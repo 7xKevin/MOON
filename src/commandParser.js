@@ -5,7 +5,9 @@ const GLOBAL_VOICE_COMMANDS = [
   { syntax: 'mute <user>', description: 'Server-mute one user', family: 'mute' },
   { syntax: 'unmute me', description: 'Server-unmute yourself', family: 'unmute' },
   { syntax: 'unmute <user>', description: 'Server-unmute one user', family: 'unmute' },
-  { syntax: 'kick <user>', description: 'Disconnect one user from voice', family: 'kick' },
+  { syntax: 'disconnect me', description: 'Disconnect yourself from voice', family: 'kick' },
+  { syntax: 'disconnect <user>', description: 'Disconnect one user from voice', family: 'kick' },
+  { syntax: 'disconnect all', description: 'Disconnect everyone from the current source channel', family: 'kick' },
   { syntax: 'drag me here', description: 'Move yourself to the session owner channel', family: 'drag' },
   { syntax: 'drag me to <vc>', description: 'Move yourself to a named voice channel', family: 'drag' },
   { syntax: 'drag <user> here', description: 'Move one user to the session owner channel', family: 'drag' },
@@ -335,10 +337,11 @@ function detectAction(tokens, actionWords, threshold = 0.72) {
   return best;
 }
 
-function parseMuteLikeCommand(tokens, commandText, rawTranscript) {
+function parseTargetActionCommand(tokens, commandText, rawTranscript) {
   const action = detectAction(tokens, [
     { type: 'mute', word: 'mute' },
     { type: 'unmute', word: 'unmute' },
+    { type: 'kick', word: 'disconnect' },
     { type: 'kick', word: 'kick' },
   ]);
 
@@ -348,7 +351,11 @@ function parseMuteLikeCommand(tokens, commandText, rawTranscript) {
 
   const targetText = cleanCommandText(tokens.slice(1).join(' '));
   const targetSpec = parseTargetToken(targetText);
-  if (!targetSpec || targetSpec.kind === 'channel') {
+  if (!targetSpec) {
+    return null;
+  }
+
+  if ((action.type === 'mute' || action.type === 'unmute') && targetSpec.kind === 'channel') {
     return null;
   }
 
@@ -459,7 +466,7 @@ function parseVoiceCommand(transcript, options = {}) {
     matchLockCommand(tokens, commandText, normalized) ||
     parseRoleCommand(tokens, commandText, normalized) ||
     parseDragCommand(tokens, commandText, normalized) ||
-    parseMuteLikeCommand(tokens, commandText, normalized)
+    parseTargetActionCommand(tokens, commandText, normalized)
   );
 }
 
