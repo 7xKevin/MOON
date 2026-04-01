@@ -193,6 +193,8 @@ function getFixedCommands() {
         "lock vc",
         "lock the voice channel",
         "close the vc",
+        "close vc",
+        "close the channel",
         "lock channel",
         "lock the channel",
       ],
@@ -206,6 +208,7 @@ function getFixedCommands() {
         "unlock vc",
         "unlock the voice channel",
         "open the vc",
+        "open vc",
         "unlock channel",
         "unlock the channel",
       ],
@@ -264,16 +267,69 @@ function parseFixedCommand(commandText, rawTranscript) {
   return best;
 }
 
+function normalizeTargetSeparators(input) {
+  return cleanCommandText(input)
+    .replace(/\balong with\b/g, " and ")
+    .replace(/\bas well as\b/g, " and ")
+    .replace(/\bplus\b/g, " and ")
+    .replace(/\bwith\b/g, " and ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseTargetSpec(targetText) {
+  const normalized = normalizeTargetSeparators(targetText);
+  if (!normalized) {
+    return null;
+  }
+
+  const groupPhrases = [
+    "all",
+    "everyone",
+    "everybody",
+    "all here",
+    "everyone here",
+    "everybody here",
+    "all of us",
+    "us",
+    "we",
+  ];
+
+  if (groupPhrases.includes(normalized)) {
+    return {
+      kind: "channel",
+      source: normalized,
+      names: [],
+    };
+  }
+
+  const pieces = normalized
+    .split(/\s*(?:,| and )\s*/g)
+    .map((piece) => cleanCommandText(piece))
+    .filter(Boolean);
+
+  if (!pieces.length) {
+    return null;
+  }
+
+  return {
+    kind: pieces.length > 1 ? "list" : "single",
+    source: normalized,
+    names: pieces,
+  };
+}
+
 function parseDragDestination(remainder, commandText, rawTranscript, confidence) {
   if (remainder.endsWith(" here")) {
-    const targetName = cleanCommandText(remainder.slice(0, -5));
-    if (!targetName) {
+    const targetSpec = parseTargetSpec(remainder.slice(0, -5));
+    if (!targetSpec) {
       return null;
     }
 
     return {
       type: "drag",
-      targetName,
+      targetSpec,
+      targetName: targetSpec.names[0] ?? targetSpec.source,
       destinationType: "here",
       destinationName: null,
       transcript: commandText,
@@ -294,15 +350,16 @@ function parseDragDestination(remainder, commandText, rawTranscript, confidence)
       continue;
     }
 
-    const targetName = cleanCommandText(match[1]);
+    const targetSpec = parseTargetSpec(match[1]);
     const destinationName = cleanCommandText(match[2]);
-    if (!targetName || !destinationName) {
+    if (!targetSpec || !destinationName) {
       return null;
     }
 
     return {
       type: "drag",
-      targetName,
+      targetSpec,
+      targetName: targetSpec.names[0] ?? targetSpec.source,
       destinationType: "named",
       destinationName,
       transcript: commandText,
@@ -327,7 +384,10 @@ function parseTargetCommand(commandText, rawTranscript) {
     { type: "unmute", verbs: ["unmute", "unmuted", "unmuting"] },
     { type: "mute", verbs: ["mute", "muted", "muting"] },
     { type: "kick", verbs: ["kick", "kicked", "disconnect", "disconnected", "remove", "removed"] },
-    { type: "drag", verbs: ["drag", "dragged", "move", "moved", "shift", "shifted", "bring", "brought", "send", "sent"] },
+    {
+      type: "drag",
+      verbs: ["drag", "dragged", "move", "moved", "shift", "shifted", "bring", "brought", "send", "sent"],
+    },
   ];
 
   let bestAction = null;
@@ -358,13 +418,15 @@ function parseTargetCommand(commandText, rawTranscript) {
     return parseDragDestination(remainder, commandText, rawTranscript, bestAction.confidence);
   }
 
-  if (!remainder) {
+  const targetSpec = parseTargetSpec(remainder);
+  if (!targetSpec) {
     return null;
   }
 
   return {
     type: bestAction.type,
-    targetName: remainder,
+    targetSpec,
+    targetName: targetSpec.names[0] ?? targetSpec.source,
     transcript: commandText,
     rawTranscript,
     confidence: bestAction.confidence,
@@ -392,6 +454,7 @@ function parseVoiceCommand(transcript, options = {}) {
 }
 
 module.exports = {
+  cleanCommandText,
   compactText,
   normalizeText,
   parseVoiceCommand,

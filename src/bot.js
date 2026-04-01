@@ -533,12 +533,176 @@ function createBot({ config, store }) {
       return { member: speaker, score: 1, ambiguous: false, special: true };
     }
 
-    if (["bot", "moon", "nova", "the bot", "the moon"].includes(normalizedTarget)) {
+    if (["bot", "moon", "nova", "the bot", "the moon", "assistant"].includes(normalizedTarget)) {
       const botMember = guild.members.me;
       return botMember ? { member: botMember, score: 1, ambiguous: false, special: true } : null;
     }
 
     return null;
+  }
+
+  function uniqueMembers(members) {
+    const seen = new Set();
+    const result = [];
+
+    for (const member of members) {
+      if (!member || seen.has(member.id)) {
+        continue;
+      }
+
+      seen.add(member.id);
+      result.push(member);
+    }
+
+    return result;
+  }
+
+  function getChannelTargetMembers(guild, channel) {
+    if (!channel) {
+      return [];
+    }
+
+    return uniqueMembers(
+      [...channel.members.values()].filter((member) => member.id !== guild.members.me?.id)
+    );
+  }
+
+  function formatMemberList(members) {
+    const names = uniqueMembers(members).map((member) => `**${member.displayName}**`);
+    if (!names.length) {
+      return "nobody";
+    }
+
+    if (names.length === 1) {
+      return names[0];
+    }
+
+    if (names.length === 2) {
+      return `${names[0]} and ${names[1]}`;
+    }
+
+    return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+  }
+
+  function formatResolutionFailures(transcript, failures) {
+    if (!failures.length) {
+      return null;
+    }
+
+    const first = failures[0];
+    if (first.reason === "no-channel") {
+      return "I couldn't tell which voice channel members you meant.";
+    }
+
+    if (first.reason === "ambiguous") {
+      return first.secondary
+        ? `I heard \`${transcript}\`, but **${first.label}** looks ambiguous between **${first.primary}** and **${first.secondary}**.`
+        : `I heard \`${transcript}\`, but **${first.label}** looks ambiguous.`;
+    }
+
+    if (first.reason === "low-confidence") {
+      return `I heard \`${transcript}\`, but I am not confident enough that **${first.primary}** is the right target for **${first.label}**.`;
+    }
+
+    const labels = failures.slice(0, 3).map((failure) => `**${failure.label}**`);
+    const joined = labels.length === 1
+      ? labels[0]
+      : labels.length === 2
+        ? `${labels[0]} and ${labels[1]}`
+        : `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
+    return `I heard \`${transcript}\`, but I couldn't confidently find ${joined}.`;
+  }
+
+  async function resolveCommandTargets(guild, speaker, controller, command, transcript) {
+    const targetSpec = command.targetSpec ?? {
+      kind: command.targetName ? "single" : "unknown",
+      source: command.targetName ?? "",
+      names: command.targetName ? [command.targetName] : [],
+    };
+
+    if (targetSpec.kind === "channel") {
+      const sourceChannel = speaker.voice.channel ?? controller.voice.channel;
+      if (!sourceChannel) {
+        return {
+          members: [],
+          failures: [{ label: targetSpec.source || "everyone", reason: "no-channel" }],
+        };
+      }
+
+      return {
+        members: getChannelTargetMembers(guild, sourceChannel),
+        failures: [],
+      };
+    }
+
+    const resolved = [];
+    const failures = [];
+
+    for (const name of targetSpec.names) {
+      const specialTarget = resolveCommandTarget(guild, speaker, name);
+      const targetMatch = specialTarget ?? (await findMemberByName(guild, name));
+
+      if (!targetMatch?.member) {
+        failures.push({ label: name, reason: "missing" });
+        continue;
+      }
+
+      if (targetMatch.ambiguous) {
+        failures.push({
+          label: name,
+          reason: "ambiguous",
+          primary: targetMatch.member.displayName,
+          secondary: targetMatch.secondMember?.displayName || targetMatch.secondMember?.user?.username || null,
+        });
+        continue;
+      }
+
+      if ((targetMatch.score ?? 1) < getTargetConfidenceFloor(command.type)) {
+        failures.push({
+          label: name,
+          reason: "low-confidence",
+          primary: targetMatch.member.displayName,
+        });
+        continue;
+      }
+
+      resolved.push(targetMatch.member);
+    }
+
+    const members = uniqueMembers(resolved);
+    if (!members.length && failures.length) {
+      return { members, failures };
+    }
+
+    const channelScopedFailures = failures.filter((failure) => failure.reason !== "no-channel");
+    return {
+      members,
+      failures: channelScopedFailures,
+    };
+  }
+
+  function getSpeechJobPriority(session, job) {
+    const focusActive = session.focusSpeakerId && session.focusUntil > Date.now();
+    if (focusActive && job.userId === session.focusSpeakerId) {
+      return 0;
+    }
+
+    if (job.userId === session.ownerUserId) {
+      return 1;
+    }
+
+    return 2;
+  }
+
+  function sortSpeechQueue(session) {
+    session.speechQueue.sort((left, right) => {
+      const priorityDelta = getSpeechJobPriority(session, left) - getSpeechJobPriority(session, right);
+      if (priorityDelta !== 0) {
+        return priorityDelta;
+      }
+
+      return left.capturedAt - right.capturedAt;
+    });
   }
 
   async function executeVoiceCommand(guild, session, command, transcript, guildSettings, controller, speaker) {
@@ -598,36 +762,14 @@ function createBot({ config, store }) {
       return;
     }
 
-    const specialTarget = resolveCommandTarget(guild, speaker, command.targetName);
-    const targetMatch = specialTarget ?? (await findMemberByName(guild, command.targetName));
-    if (!targetMatch?.member) {
+    const targetResult = await resolveCommandTargets(guild, speaker, controller, command, transcript);
+    if (!targetResult.members.length) {
       await sendStatus(
         guild,
-        `I heard \`${transcript}\`, but I couldn't confidently find **${command.targetName}**.`
+        formatResolutionFailures(transcript, targetResult.failures) ?? `I heard \`${transcript}\`, but I couldn't confidently resolve the target.`
       );
       return;
     }
-
-    if (targetMatch.ambiguous) {
-      const secondName = targetMatch.secondMember?.displayName || targetMatch.secondMember?.user?.username;
-      await sendStatus(
-        guild,
-        secondName
-          ? `I heard \`${transcript}\`, but **${command.targetName}** looks ambiguous between **${targetMatch.member.displayName}** and **${secondName}**.`
-          : `I heard \`${transcript}\`, but **${command.targetName}** looks ambiguous.`
-      );
-      return;
-    }
-
-    if ((targetMatch.score ?? 1) < getTargetConfidenceFloor(command.type)) {
-      await sendStatus(
-        guild,
-        `I heard \`${transcript}\`, but I am not confident enough that **${targetMatch.member.displayName}** is the right target.`
-      );
-      return;
-    }
-
-    const target = targetMatch.member;
 
     if (command.type === "drag") {
       const destination =
@@ -651,7 +793,25 @@ function createBot({ config, store }) {
         return;
       }
 
-      if (target.id === guild.members.me?.id) {
+      const botTarget = targetResult.members.find((member) => member.id === guild.members.me?.id) ?? null;
+      const humanTargets = targetResult.members.filter((member) => member.id !== guild.members.me?.id);
+      const movedMembers = [];
+      const unavailableMembers = [];
+
+      for (const target of humanTargets) {
+        if (!target.voice.channel) {
+          unavailableMembers.push(target);
+          continue;
+        }
+
+        await target.voice.setChannel(
+          destination.channel,
+          `MOON voice command by ${controller.user.tag}`
+        );
+        movedMembers.push(target);
+      }
+
+      if (botTarget) {
         try {
           session.connection.rejoin({
             channelId: destination.channel.id,
@@ -660,62 +820,127 @@ function createBot({ config, store }) {
           });
 
           await entersState(session.connection, VoiceConnectionStatus.Ready, 20000);
-          await sendStatus(guild, `Moved MOON into **${destination.channel.name}**.`);
         } catch (error) {
           throw createUserFacingError(`Couldn't move MOON into **${destination.channel.name}**.`);
         }
+      }
+
+      if (!movedMembers.length && !botTarget) {
+        const messages = [];
+        if (unavailableMembers.length) {
+          messages.push(`${formatMemberList(unavailableMembers)} ${unavailableMembers.length === 1 ? "is" : "are"} not in a voice channel.`);
+        }
+        if (targetResult.failures.length) {
+          messages.push(formatResolutionFailures(transcript, targetResult.failures));
+        }
+        await sendStatus(guild, messages.filter(Boolean).join(" ") || `I couldn't move anyone into **${destination.channel.name}**.`);
         return;
       }
 
-      if (!target.voice.channel) {
-        await sendStatus(guild, `**${target.displayName}** is not in a voice channel.`);
-        return;
+      const movedTargets = botTarget ? [...movedMembers, botTarget] : movedMembers;
+      if (movedMembers.length === 1 && !botTarget) {
+        await sendStatus(guild, `Moved **${movedMembers[0].displayName}** into **${destination.channel.name}**.`);
+      } else if (botTarget && !movedMembers.length) {
+        await sendStatus(guild, `Moved MOON into **${destination.channel.name}**.`);
+      } else {
+        await sendStatus(guild, `Moved ${formatMemberList(movedTargets)} into **${destination.channel.name}**.`);
       }
 
-      await target.voice.setChannel(
-        destination.channel,
-        `MOON voice command by ${controller.user.tag}`
-      );
-      await sendStatus(guild, `Moved **${target.displayName}** into **${destination.channel.name}**.`);
+      if (unavailableMembers.length) {
+        await sendStatus(guild, `${formatMemberList(unavailableMembers)} ${unavailableMembers.length === 1 ? "is" : "are"} not in a voice channel.`);
+      }
+      if (targetResult.failures.length) {
+        await sendStatus(guild, formatResolutionFailures(transcript, targetResult.failures));
+      }
       return;
     }
 
-    if (command.type === "mute") {
-      if (!target.voice.channel) {
-        await sendStatus(guild, `**${target.displayName}** is not in a voice channel.`);
-        return;
-      }
-
-      await target.voice.setMute(true, `MOON voice command by ${controller.user.tag}`);
-      await sendStatus(guild, `Server-muted **${target.displayName}**.`);
-      return;
-    }
-
-    if (command.type === "unmute") {
-      if (!target.voice.channel) {
-        await sendStatus(guild, `**${target.displayName}** is not in a voice channel.`);
-        return;
-      }
-
-      await target.voice.setMute(false, `MOON voice command by ${controller.user.tag}`);
-      await sendStatus(guild, `Server-unmuted **${target.displayName}**.`);
-      return;
-    }
-
+    let targets = targetResult.members;
     if (command.type === "kick") {
-      if (target.id === guild.members.me?.id) {
+      const botTargets = targets.filter((member) => member.id === guild.members.me?.id);
+      if (botTargets.length && targets.length > 1) {
+        await sendStatus(guild, "Disconnecting MOON ends the session, so remove MOON in a separate command.");
+        targets = targets.filter((member) => member.id !== guild.members.me?.id);
+      }
+
+      if (targets.length === 1 && targets[0].id === guild.members.me?.id) {
         destroySession(guild.id);
         await sendStatusToChannel(guild, session.textChannelId, "Disconnected from voice.");
         return;
       }
+    }
 
+    const activeTargets = [];
+    const unavailableMembers = [];
+
+    for (const target of targets) {
       if (!target.voice.channel) {
-        await sendStatus(guild, `**${target.displayName}** is not in a voice channel.`);
-        return;
+        unavailableMembers.push(target);
+        continue;
       }
 
-      await target.voice.disconnect(`MOON voice command by ${controller.user.tag}`);
-      await sendStatus(guild, `Disconnected **${target.displayName}** from voice chat.`);
+      if (command.type === "mute") {
+        await target.voice.setMute(true, `MOON voice command by ${controller.user.tag}`);
+        activeTargets.push(target);
+        continue;
+      }
+
+      if (command.type === "unmute") {
+        await target.voice.setMute(false, `MOON voice command by ${controller.user.tag}`);
+        activeTargets.push(target);
+        continue;
+      }
+
+      if (command.type === "kick") {
+        await target.voice.disconnect(`MOON voice command by ${controller.user.tag}`);
+        activeTargets.push(target);
+      }
+    }
+
+    if (!activeTargets.length) {
+      const messages = [];
+      if (unavailableMembers.length) {
+        messages.push(`${formatMemberList(unavailableMembers)} ${unavailableMembers.length === 1 ? "is" : "are"} not in a voice channel.`);
+      }
+      if (targetResult.failures.length) {
+        messages.push(formatResolutionFailures(transcript, targetResult.failures));
+      }
+      await sendStatus(guild, messages.filter(Boolean).join(" ") || `I couldn't execute \`${command.type}\` for that target.`);
+      return;
+    }
+
+    if (command.type === "mute") {
+      await sendStatus(
+        guild,
+        activeTargets.length === 1
+          ? `Server-muted **${activeTargets[0].displayName}**.`
+          : `Server-muted ${formatMemberList(activeTargets)}.`
+      );
+    }
+
+    if (command.type === "unmute") {
+      await sendStatus(
+        guild,
+        activeTargets.length === 1
+          ? `Server-unmuted **${activeTargets[0].displayName}**.`
+          : `Server-unmuted ${formatMemberList(activeTargets)}.`
+      );
+    }
+
+    if (command.type === "kick") {
+      await sendStatus(
+        guild,
+        activeTargets.length === 1
+          ? `Disconnected **${activeTargets[0].displayName}** from voice chat.`
+          : `Disconnected ${formatMemberList(activeTargets)} from voice chat.`
+      );
+    }
+
+    if (unavailableMembers.length) {
+      await sendStatus(guild, `${formatMemberList(unavailableMembers)} ${unavailableMembers.length === 1 ? "is" : "are"} not in a voice channel.`);
+    }
+    if (targetResult.failures.length) {
+      await sendStatus(guild, formatResolutionFailures(transcript, targetResult.failures));
     }
   }
 
@@ -775,6 +1000,9 @@ function createBot({ config, store }) {
       log(`Ignored transcript from ${speaker.user.tag}: ${transcript}`);
       return;
     }
+
+    latestSession.focusSpeakerId = speaker.id;
+    latestSession.focusUntil = Date.now() + 4000;
 
     if (shouldPostTranscripts(guildSettings)) {
       await sendStatus(guild, `Transcript from **${speaker.displayName}**: \`${transcript}\``);
@@ -886,15 +1114,15 @@ function createBot({ config, store }) {
         return;
       }
 
-      if (latestSession.speechQueue.length >= 5) {
-        latestSession.speechQueue.shift();
-      }
-
       latestSession.speechQueue.push({
         userId,
         pcmBuffer,
         capturedAt: Date.now(),
       });
+      sortSpeechQueue(latestSession);
+      while (latestSession.speechQueue.length > 8) {
+        latestSession.speechQueue.pop();
+      }
 
       drainSpeechQueue(guild).catch((error) => {
         log("Queue start failed", error?.details ?? error);
@@ -952,6 +1180,8 @@ function createBot({ config, store }) {
       isProcessing: false,
       speechQueue: [],
       activeCaptures: new Set(),
+      focusSpeakerId: null,
+      focusUntil: 0,
       lastCommandAt: 0,
       guildSettingsSnapshot: guildSettings,
       runtimeVoiceSettings: getRuntimeVoiceSettings(guildSettings),
@@ -982,6 +1212,8 @@ function createBot({ config, store }) {
         : "Speak the command phrase directly.",
       `\`${wakePrefix}drag <name> here\``,
       `\`${wakePrefix}drag <name> to general\``,
+      `\`${wakePrefix}drag all to general\``,
+      `\`${wakePrefix}drag me and aditya to admin room\``,
       `\`${wakePrefix}mute <name>\``,
       `\`${wakePrefix}unmute <name>\``,
       `\`${wakePrefix}kick <name>\``,
@@ -1119,4 +1351,8 @@ function createBot({ config, store }) {
 module.exports = {
   createBot,
 };
+
+
+
+
 
