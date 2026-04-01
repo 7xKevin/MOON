@@ -693,3 +693,64 @@ button.is-loading {
     animation: none;
   }
 }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: color-mix(in srgb, var(--bg) 48%, transparent);
+  backdrop-filter: blur(10px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+  z-index: 58;
+}
+
+.modal-backdrop.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+body.modal-open {
+  overflow: hidden;
+}
+
+.modal-sheet {
+  width: min(860px, calc(100vw - 32px));
+  max-height: min(78vh, 900px);
+  overflow: auto;
+  padding: 20px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+  transform: translateY(12px) scale(0.98);
+  transition: transform 180ms ease;
+}
+
+.modal-backdrop.is-visible .modal-sheet {
+  transform: translateY(0) scale(1);
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 640px) {
+  .modal-sheet {
+    width: calc(100vw - 20px);
+    max-height: 84vh;
+    padding: 16px;
+  }
+
+  .modal-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

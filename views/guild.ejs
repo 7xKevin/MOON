@@ -132,14 +132,9 @@
 
               <section class="form-section">
                 <h3 class="section-title">Global voice commands</h3>
-                <p class="section-lead">These are the same short deterministic commands MOON posts in Discord when you use <code>!join</code>. Learn them here and repeat the same command shapes in voice chat.</p>
-                <div class="command-grid">
-                  <% globalCommandCatalog.forEach((command) => { %>
-                    <article class="command-card">
-                      <code><%= settings.requireWakeWord ? settings.wakeWord + ' ' + command.syntax : command.syntax %></code>
-                      <span class="field-help"><%= command.description %></span>
-                    </article>
-                  <% }) %>
+                <p class="section-lead">Use the same short deterministic commands MOON posts in Discord when you start a session.</p>
+                <div class="inline-actions">
+                  <button class="button" type="button" data-command-modal-open>Show Commands</button>
                 </div>
               </section>
 
@@ -235,7 +230,30 @@
         </section>
       </main>
     </div>
+
+    <div class="modal-backdrop" data-command-modal hidden>
+      <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="command-modal-title">
+        <div class="modal-header">
+          <div>
+            <h2 class="section-title" id="command-modal-title">Global voice commands</h2>
+            <p class="section-lead">
+              Use the same short deterministic commands MOON posts in Discord when you start a session.
+            </p>
+          </div>
+          <button class="button" type="button" data-command-modal-close>Close</button>
+        </div>
+        <div class="command-grid">
+          <% globalCommandCatalog.forEach((command) => { %>
+            <article class="command-card">
+              <code><%= settings.requireWakeWord ? settings.wakeWord + ' ' + command.syntax : command.syntax %></code>
+              <span class="field-help"><%= command.description %></span>
+            </article>
+          <% }) %>
+        </div>
+      </div>
+    </div>
   </body>
 </html>
+
 
 

@@ -56,6 +56,38 @@
     loader.classList.toggle('is-visible', Boolean(active));
   }
 
+  function getCommandModal() {
+    return document.querySelector('[data-command-modal]');
+  }
+
+  function closeCommandModal() {
+    const modal = getCommandModal();
+    if (!modal) {
+      return;
+    }
+
+    modal.classList.remove('is-visible');
+    document.body.classList.remove('modal-open');
+    window.setTimeout(function () {
+      if (!modal.classList.contains('is-visible')) {
+        modal.hidden = true;
+      }
+    }, 180);
+  }
+
+  function openCommandModal() {
+    const modal = getCommandModal();
+    if (!modal) {
+      return;
+    }
+
+    modal.hidden = false;
+    requestAnimationFrame(function () {
+      modal.classList.add('is-visible');
+      document.body.classList.add('modal-open');
+    });
+  }
+
   function runPageInitializers() {
     window.MOON_THEME?.init?.();
     window.MOON_GUILD_SETTINGS?.init?.();
@@ -172,6 +204,21 @@
   });
 
   document.addEventListener('click', function (event) {
+    const openButton = event.target.closest('[data-command-modal-open]');
+    if (openButton) {
+      event.preventDefault();
+      openCommandModal();
+      return;
+    }
+
+    const closeButton = event.target.closest('[data-command-modal-close]');
+    const modal = event.target.closest('[data-command-modal]');
+    if (closeButton || (modal && event.target === modal)) {
+      event.preventDefault();
+      closeCommandModal();
+      return;
+    }
+
     const link = event.target.closest('a');
     if (!isPlainPrimaryClick(event) || !shouldHandleLink(link)) {
       return;
@@ -186,10 +233,19 @@
     navigateTo(targetUrl.href, { pushState: true, label: 'Opening...' });
   });
 
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') {
+      closeCommandModal();
+    }
+  });
+
   window.MOON_UI = {
     showToast,
     setPageLoading,
     navigateTo,
     runPageInitializers,
+    openCommandModal,
+    closeCommandModal,
   };
 })();
+
