@@ -333,6 +333,18 @@ function buildDragCommand(targetSpec, commandText, rawTranscript, confidence, de
   };
 }
 
+function buildRoleCommand(type, targetSpec, roleName, commandText, rawTranscript, confidence) {
+  return {
+    type,
+    targetSpec,
+    targetName: targetSpec.names[0] ?? targetSpec.source,
+    roleName,
+    transcript: commandText,
+    rawTranscript,
+    confidence,
+  };
+}
+
 function parseDragDestination(remainder, commandText, rawTranscript, confidence) {
   const fromPatterns = [
     /^(.*?)\s+from\s+(.*?)\s+to\s+here$/,
@@ -395,6 +407,70 @@ function parseDragDestination(remainder, commandText, rawTranscript, confidence)
     }
 
     return buildDragCommand(targetSpec, commandText, rawTranscript, confidence, "named", destinationName);
+  }
+
+  return null;
+}
+
+function parseRoleCommand(commandText, rawTranscript) {
+  const tokens = cleanCommandText(commandText).split(" ").filter(Boolean);
+  if (tokens.length < 3) {
+    return null;
+  }
+
+  const firstWord = tokens[0];
+  const actionGroups = [
+    {
+      type: "role-add",
+      verbs: ["give", "gave", "grant", "granted", "add", "added", "assign", "assigned"],
+      patterns: [
+        /^(?:give|gave|grant|granted|add|added|assign|assigned)\s+(.*?)\s+(?:the\s+)?(.+?)\s+role$/,
+        /^(?:give|gave|grant|granted|add|added|assign|assigned)\s+(?:the\s+)?(.+?)\s+role\s+to\s+(.*?)$/,
+      ],
+    },
+    {
+      type: "role-remove",
+      verbs: ["remove", "removed", "take", "took", "strip", "stripped", "unassign", "unassigned"],
+      patterns: [
+        /^(?:remove|removed|take|took|strip|stripped|unassign|unassigned)\s+(?:the\s+)?(.+?)\s+role\s+from\s+(.*?)$/,
+        /^(?:remove|removed|take|took|strip|stripped|unassign|unassigned)\s+(.*?)\s+(?:from\s+)?(?:the\s+)?(.+?)\s+role$/,
+      ],
+    },
+  ];
+
+  let bestAction = null;
+  for (const action of actionGroups) {
+    if (action.verbs.includes(firstWord)) {
+      bestAction = { action, confidence: 1 };
+      break;
+    }
+
+    const match = bestMatch(firstWord, action.verbs, 0.7);
+    if (match && (!bestAction || match.score > bestAction.confidence)) {
+      bestAction = { action, confidence: match.score };
+    }
+  }
+
+  if (!bestAction) {
+    return null;
+  }
+
+  const cleaned = cleanCommandText(commandText);
+  for (const pattern of bestAction.action.patterns) {
+    const match = cleaned.match(pattern);
+    if (!match) {
+      continue;
+    }
+
+    const targetFirst = pattern.source.includes("role\\s+to") || pattern.source.includes("role\\s+from");
+    const roleSegment = cleanCommandText(targetFirst ? match[1] : match[2]);
+    const targetSegment = cleanCommandText(targetFirst ? match[2] : match[1]);
+    const targetSpec = parseTargetSpec(targetSegment);
+    if (!targetSpec || !roleSegment) {
+      return null;
+    }
+
+    return buildRoleCommand(bestAction.action.type, targetSpec, roleSegment, commandText, rawTranscript, bestAction.confidence);
   }
 
   return null;
@@ -479,7 +555,9 @@ function parseVoiceCommand(transcript, options = {}) {
     return null;
   }
 
-  return parseFixedCommand(commandText, normalized) || parseTargetCommand(commandText, normalized);
+  return parseFixedCommand(commandText, normalized)
+    || parseRoleCommand(commandText, normalized)
+    || parseTargetCommand(commandText, normalized);
 }
 
 module.exports = {
@@ -491,4 +569,3 @@ module.exports = {
   similarityScore,
   stripWakeWordPrefix,
 };
-

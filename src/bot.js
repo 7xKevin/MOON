@@ -401,6 +401,10 @@ function createBot({ config, store }) {
       return 0.82;
     }
 
+    if (commandType === "role-add" || commandType === "role-remove") {
+      return 0.8;
+    }
+
     if (commandType === "mute" || commandType === "unmute") {
       return 0.76;
     }
@@ -411,6 +415,10 @@ function createBot({ config, store }) {
   function getTargetConfidenceFloor(commandType) {
     if (commandType === "kick" || commandType === "drag") {
       return 0.84;
+    }
+
+    if (commandType === "role-add" || commandType === "role-remove") {
+      return 0.8;
     }
 
     return 0.78;
@@ -523,6 +531,87 @@ function createBot({ config, store }) {
     };
   }
 
+  function normalizeRoleLookup(input) {
+    return normalizeText(input)
+      .replace(/\brole\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function scoreRoleName(candidate, lookup) {
+    const normalizedCandidate = normalizeRoleLookup(candidate);
+    const normalizedLookup = normalizeRoleLookup(lookup);
+
+    if (!normalizedCandidate || !normalizedLookup) {
+      return -1;
+    }
+
+    if (normalizedCandidate === normalizedLookup) {
+      return 1;
+    }
+
+    const compactCandidate = compactText(normalizedCandidate);
+    const compactLookup = compactText(normalizedLookup);
+
+    if (compactCandidate === compactLookup) {
+      return 1;
+    }
+
+    if (
+      compactCandidate.startsWith(compactLookup) ||
+      compactLookup.startsWith(compactCandidate)
+    ) {
+      return 0.94;
+    }
+
+    if (
+      compactCandidate.includes(compactLookup) ||
+      compactLookup.includes(compactCandidate)
+    ) {
+      return 0.88;
+    }
+
+    const candidatePhonetic = phoneticKey(normalizedCandidate);
+    const lookupPhonetic = phoneticKey(normalizedLookup);
+    if (candidatePhonetic && lookupPhonetic && candidatePhonetic === lookupPhonetic) {
+      return 0.93;
+    }
+
+    return similarityScore(normalizedCandidate, normalizedLookup);
+  }
+
+  async function findRoleByName(guild, rawName) {
+    const roles = guild.roles.cache.filter((role) => role.id !== guild.id);
+
+    let best = null;
+    let second = null;
+
+    for (const role of roles.values()) {
+      const score = scoreRoleName(role.name, rawName);
+      if (score < 0) {
+        continue;
+      }
+
+      const candidate = { role, score };
+      if (!best || score > best.score) {
+        second = best;
+        best = candidate;
+      } else if (!second || score > second.score) {
+        second = candidate;
+      }
+    }
+
+    if (!best || best.score < 0.76) {
+      return { role: null, score: best?.score ?? -1, ambiguous: false, secondRole: second?.role ?? null };
+    }
+
+    return {
+      role: best.role,
+      score: best.score,
+      ambiguous: Boolean(second && best.score - second.score < 0.05),
+      secondRole: second?.role ?? null,
+    };
+  }
   function resolveCommandTarget(guild, speaker, targetName) {
     const normalizedTarget = normalizeText(targetName);
     if (!normalizedTarget) {
@@ -820,6 +909,103 @@ function createBot({ config, store }) {
       return;
     }
 
+    if (command.type === "role-add" || command.type === "role-remove") {
+      const botMember = guild.members.me;
+      if (!botMember?.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+        await sendStatus(guild, "I need the **Manage Roles** permission to do that.");
+        return;
+      }
+
+      const roleMatch = await findRoleByName(guild, command.roleName);
+      if (!roleMatch.role) {
+        await sendStatus(guild, `I couldn't find a role named **${command.roleName}**.`);
+        return;
+      }
+
+      if (roleMatch.ambiguous) {
+        const secondRoleName = roleMatch.secondRole?.name;
+        await sendStatus(
+          guild,
+          secondRoleName
+            ? `I found multiple roles close to **${command.roleName}**: **${roleMatch.role.name}** and **${secondRoleName}**.`
+            : `I found multiple roles close to **${command.roleName}**.`
+        );
+        return;
+      }
+
+      if (!roleMatch.role.editable) {
+        await sendStatus(guild, `I can't manage **${roleMatch.role.name}** because it is above my highest role.`);
+        return;
+      }
+
+      const activeTargets = [];
+      const skippedTargets = [];
+      const unmanageableTargets = [];
+
+      for (const target of targetResult.members) {
+        if (!target.manageable) {
+          unmanageableTargets.push(target);
+          continue;
+        }
+
+        if (command.type === "role-add") {
+          if (target.roles.cache.has(roleMatch.role.id)) {
+            skippedTargets.push(target);
+            continue;
+          }
+
+          await target.roles.add(roleMatch.role, `MOON voice command by ${controller.user.tag}`);
+          activeTargets.push(target);
+          continue;
+        }
+
+        if (!target.roles.cache.has(roleMatch.role.id)) {
+          skippedTargets.push(target);
+          continue;
+        }
+
+        await target.roles.remove(roleMatch.role, `MOON voice command by ${controller.user.tag}`);
+        activeTargets.push(target);
+      }
+
+      if (activeTargets.length) {
+        await sendStatus(
+          guild,
+          command.type === "role-add"
+            ? activeTargets.length === 1
+              ? `Gave **${roleMatch.role.name}** to **${activeTargets[0].displayName}**.`
+              : `Gave **${roleMatch.role.name}** to ${formatMemberList(activeTargets)}.`
+            : activeTargets.length === 1
+              ? `Removed **${roleMatch.role.name}** from **${activeTargets[0].displayName}**.`
+              : `Removed **${roleMatch.role.name}** from ${formatMemberList(activeTargets)}.`
+        );
+      }
+
+      if (skippedTargets.length) {
+        await sendStatus(
+          guild,
+          command.type === "role-add"
+            ? `${formatMemberList(skippedTargets)} already ${skippedTargets.length === 1 ? "has" : "have"} **${roleMatch.role.name}**.`
+            : `${formatMemberList(skippedTargets)} ${skippedTargets.length === 1 ? "does" : "do"} not have **${roleMatch.role.name}**.`
+        );
+      }
+
+      if (unmanageableTargets.length) {
+        await sendStatus(
+          guild,
+          `${formatMemberList(unmanageableTargets)} ${unmanageableTargets.length === 1 ? "is" : "are"} above my role hierarchy, so I can't change roles for ${unmanageableTargets.length === 1 ? "them" : "those members"}.`
+        );
+      }
+
+      if (targetResult.failures.length) {
+        await sendStatus(guild, formatResolutionFailures(transcript, targetResult.failures));
+      }
+
+      if (!activeTargets.length && !skippedTargets.length && !unmanageableTargets.length) {
+        await sendStatus(guild, `I couldn't execute ${command.type === "role-add" ? "that role assignment" : "that role removal"}.`);
+      }
+      return;
+    }
     if (command.type === "drag") {
       const destination =
         command.destinationType === "named"
@@ -1266,6 +1452,8 @@ function createBot({ config, store }) {
       `\`${wakePrefix}mute <name>\``,
       `\`${wakePrefix}unmute <name>\``,
       `\`${wakePrefix}kick <name>\``,
+      `\`${wakePrefix}give <name> <role> role\``,
+      `\`${wakePrefix}remove <role> role from <name>\``,
       `\`${wakePrefix}lock the vc\``,
       `\`${wakePrefix}unlock the vc\``,
     ].join("\n");
@@ -1400,6 +1588,8 @@ function createBot({ config, store }) {
 module.exports = {
   createBot,
 };
+
+
 
 
 
