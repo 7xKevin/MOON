@@ -18,6 +18,10 @@ const GLOBAL_VOICE_COMMANDS = [
   { syntax: 'drag all from <vc> to <vc>', description: 'Move everyone from one VC to another VC', family: 'drag' },
   { syntax: 'role add <user> role <role>', description: 'Give one role to one user', family: 'role-add' },
   { syntax: 'role remove <user> role <role>', description: 'Remove one role from one user', family: 'role-remove' },
+  { syntax: 'say in <text-channel> text <message>', description: 'Send one plain message in a text channel', family: 'say' },
+  { syntax: 'mention <user> in <text-channel>', description: 'Mention one user in a text channel', family: 'mention' },
+  { syntax: 'spam <count> in <text-channel> text <message>', description: 'Send a short message up to 5 times in a text channel', family: 'spam' },
+  { syntax: 'stop spam', description: 'Stop the active spam job for this server', family: 'spam-stop' },
 ];
 
 function normalizeText(input) {
@@ -444,6 +448,82 @@ function parseRoleCommand(tokens, commandText, rawTranscript) {
   }
 
   return buildRoleCommand(action.type, targetSpec, roleName, commandText, rawTranscript, average([roleHead.score, action.score]));
+}
+
+function parseTextCommand(tokens, commandText, rawTranscript) {
+  if (!tokens.length) {
+    return null;
+  }
+
+  const stopMatch = detectAction(tokens, [{ type: 'spam-stop', word: 'stop' }], 0.72);
+  if (stopMatch && tokens[1] && bestKeywordMatch(tokens[1], ['spam'], 0.72)) {
+    return buildTextCommand('spam-stop', commandText, rawTranscript, average([stopMatch.score, 1]));
+  }
+
+  const sayMatch = detectAction(tokens, [{ type: 'say', word: 'say' }], 0.72);
+  if (sayMatch) {
+    const remainder = cleanCommandText(tokens.slice(1).join(' '));
+    const match = remainder.match(/^in (.+?) text (.+)$/);
+    if (!match) {
+      return null;
+    }
+
+    const channelName = cleanCommandText(match[1]);
+    const message = String(match[2] ?? '').trim();
+    if (!channelName || !message) {
+      return null;
+    }
+
+    return buildTextCommand('say', commandText, rawTranscript, sayMatch.score, {
+      channelName,
+      message,
+    });
+  }
+
+  const mentionMatch = detectAction(tokens, [{ type: 'mention', word: 'mention' }, { type: 'mention', word: 'ping' }], 0.72);
+  if (mentionMatch) {
+    const remainder = cleanCommandText(tokens.slice(1).join(' '));
+    const match = remainder.match(/^(.*?) in (.+)$/);
+    if (!match) {
+      return null;
+    }
+
+    const targetSpec = parseTargetToken(match[1]);
+    const channelName = cleanCommandText(match[2]);
+    if (!targetSpec || targetSpec.kind === 'channel' || !channelName) {
+      return null;
+    }
+
+    return buildTextCommand('mention', commandText, rawTranscript, mentionMatch.score, {
+      targetSpec,
+      targetName: targetSpec.names[0] ?? targetSpec.source,
+      channelName,
+    });
+  }
+
+  const spamMatch = detectAction(tokens, [{ type: 'spam', word: 'spam' }], 0.72);
+  if (spamMatch) {
+    const remainder = cleanCommandText(tokens.slice(1).join(' '));
+    const match = remainder.match(/^(d{1,2}) in (.+?) text (.+)$/);
+    if (!match) {
+      return null;
+    }
+
+    const count = Number.parseInt(match[1], 10);
+    const channelName = cleanCommandText(match[2]);
+    const message = String(match[3] ?? '').trim();
+    if (!Number.isInteger(count) || count <= 0 || !channelName || !message) {
+      return null;
+    }
+
+    return buildTextCommand('spam', commandText, rawTranscript, spamMatch.score, {
+      count,
+      channelName,
+      message,
+    });
+  }
+
+  return null;
 }
 
 function parseVoiceCommand(transcript, options = {}) {

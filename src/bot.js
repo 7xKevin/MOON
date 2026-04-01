@@ -37,6 +37,7 @@ function createBot({ config, store }) {
   });
 
   const sessions = new Map();
+  const spamJobs = new Map();
 
   function log(message, extra) {
     if (extra) {
@@ -288,6 +289,95 @@ function createBot({ config, store }) {
         { reason: `MOON voice command by ${controller.user.tag}` }
       );
       await sendStatus(guild, `Unlocked **${controllerChannel.name}**.`);
+      return;
+    }
+
+    if (command.type === "spam-stop") {
+      const stopped = stopSpamJob(guild.id);
+      await sendStatus(guild, stopped ? "Stopped the active spam job." : "There is no active spam job right now.");
+      return;
+    }
+
+    if (command.type === "say" || command.type === "spam") {
+      const botMember = guild.members.me;
+      const channelMatch = await resolveTextChannel(guild, command.channelName);
+      if (!channelMatch.channel) {
+        await sendStatus(guild, `I couldn't find a text channel named **${command.channelName}**.`);
+        return;
+      }
+
+      if (channelMatch.ambiguous) {
+        const secondChannelName = channelMatch.secondChannel?.name;
+        await sendStatus(
+          guild,
+          secondChannelName
+            ? `I found multiple text channels close to **${command.channelName}**: **${channelMatch.channel.name}** and **${secondChannelName}**.`
+            : `I found multiple text channels close to **${command.channelName}**.`
+        );
+        return;
+      }
+
+      if (!canSendText(channelMatch.channel, botMember)) {
+        await sendStatus(guild, `I can't send messages in **${channelMatch.channel.name}**.`);
+        return;
+      }
+
+      const safeMessage = String(command.message ?? "").trim().slice(0, 300);
+      if (!safeMessage) {
+        await sendStatus(guild, "I need some message text for that command.");
+        return;
+      }
+
+      if (command.type === "say") {
+        await sendPlainText(channelMatch.channel, safeMessage);
+        await sendStatus(guild, `Sent a message in **${channelMatch.channel.name}**.`);
+        return;
+      }
+
+      const spamCount = Math.min(Math.max(command.count || 1, 1), 5);
+      startSpamJob(guild, channelMatch.channel, safeMessage, spamCount);
+      await sendStatus(guild, `Started spam in **${channelMatch.channel.name}** for **${spamCount}** messages.`);
+      return;
+    }
+
+    if (command.type === "mention") {
+      const botMember = guild.members.me;
+      const channelMatch = await resolveTextChannel(guild, command.channelName);
+      if (!channelMatch.channel) {
+        await sendStatus(guild, `I couldn't find a text channel named **${command.channelName}**.`);
+        return;
+      }
+
+      if (channelMatch.ambiguous) {
+        const secondChannelName = channelMatch.secondChannel?.name;
+        await sendStatus(
+          guild,
+          secondChannelName
+            ? `I found multiple text channels close to **${command.channelName}**: **${channelMatch.channel.name}** and **${secondChannelName}**.`
+            : `I found multiple text channels close to **${command.channelName}**.`
+        );
+        return;
+      }
+
+      if (!canSendText(channelMatch.channel, botMember)) {
+        await sendStatus(guild, `I can't send messages in **${channelMatch.channel.name}**.`);
+        return;
+      }
+
+      const mentionTargets = await resolveCommandTargets(guild, speaker, controller, command, getTargetConfidenceFloor);
+      if (!mentionTargets.members.length) {
+        await sendStatus(
+          guild,
+          formatResolutionFailures(transcript, mentionTargets.failures) ?? `I heard \`${transcript}\`, but I couldn't confidently resolve the target.`
+        );
+        return;
+      }
+
+      await sendMentionText(channelMatch.channel, mentionTargets.members);
+      await sendStatus(guild, `Mentioned ${formatMemberList(mentionTargets.members)} in **${channelMatch.channel.name}**.`);
+      if (mentionTargets.failures.length) {
+        await sendStatus(guild, formatResolutionFailures(transcript, mentionTargets.failures));
+      }
       return;
     }
 

@@ -246,6 +246,14 @@ function isVoiceLikeChannel(channel) {
   return channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildStageVoice;
 }
 
+function isTextLikeChannel(channel) {
+  if (!channel) {
+    return false;
+  }
+
+  return channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement;
+}
+
 function rankVoiceChannelMatches(channels, rawName) {
   let best = null;
   let second = null;
@@ -279,6 +287,54 @@ async function findVoiceChannelByName(guild, rawName) {
     const fetchedChannels = await guild.channels.fetch().catch(() => null);
     if (fetchedChannels?.size) {
       ({ best, second } = rankVoiceChannelMatches(fetchedChannels, rawName));
+    }
+  }
+
+  if (!best || best.score < 0.76) {
+    return { channel: null, score: best?.score ?? -1, ambiguous: false, secondChannel: second?.channel ?? null };
+  }
+
+  return {
+    channel: best.channel,
+    score: best.score,
+    ambiguous: Boolean(second && best.score - second.score < 0.05),
+    secondChannel: second?.channel ?? null,
+  };
+}
+
+function rankTextChannelMatches(channels, rawName) {
+  let best = null;
+  let second = null;
+
+  for (const channel of channels.values()) {
+    if (!isTextLikeChannel(channel)) {
+      continue;
+    }
+
+    const score = scoreChannelName(channel.name, rawName);
+    if (score < 0) {
+      continue;
+    }
+
+    const candidate = { channel, score };
+    if (!best || score > best.score) {
+      second = best;
+      best = candidate;
+    } else if (!second || score > second.score) {
+      second = candidate;
+    }
+  }
+
+  return { best, second };
+}
+
+async function findTextChannelByName(guild, rawName) {
+  let { best, second } = rankTextChannelMatches(guild.channels.cache, rawName);
+
+  if (!best || best.score < 0.9) {
+    const fetchedChannels = await guild.channels.fetch().catch(() => null);
+    if (fetchedChannels?.size) {
+      ({ best, second } = rankTextChannelMatches(fetchedChannels, rawName));
     }
   }
 
@@ -586,6 +642,7 @@ async function resolveCommandTargets(guild, speaker, controller, command, getTar
 module.exports = {
   findMemberByName,
   findRoleByName,
+  findTextChannelByName,
   findVoiceChannelByName,
   formatMemberList,
   formatResolutionFailures,
