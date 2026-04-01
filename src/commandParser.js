@@ -412,6 +412,50 @@ function parseDragDestination(remainder, commandText, rawTranscript, confidence)
   return null;
 }
 
+function parseFuzzyDragShortcut(firstWord, remainder, commandText, rawTranscript, confidence) {
+  const compactFirst = compactText(firstWord);
+  const dragHints = ["drag", "rag", "move", "shift", "bring", "send"];
+
+  if (!dragHints.some((hint) => compactFirst.includes(hint))) {
+    return null;
+  }
+
+  const targetCandidates = [
+    { targetSpec: { kind: "single", source: "me", names: ["me"] }, hints: ["me", "myself", "self"] },
+    { targetSpec: { kind: "channel", source: "all", names: [] }, hints: ["all", "everyone", "everybody"] },
+    { targetSpec: { kind: "channel", source: "us", names: [] }, hints: ["us", "we"] },
+  ];
+
+  const matchedTarget = targetCandidates.find((candidate) =>
+    candidate.hints.some((hint) => compactFirst.includes(compactText(hint)))
+  );
+
+  if (!matchedTarget) {
+    return null;
+  }
+
+  let destinationText = cleanCommandText(
+    remainder.replace(/^(?:to|into|in|or|and|at)\b\s*/u, "")
+  );
+
+  if (!destinationText) {
+    return null;
+  }
+
+  if (destinationText === "here") {
+    return buildDragCommand(matchedTarget.targetSpec, commandText, rawTranscript, confidence, "here", null);
+  }
+
+  return buildDragCommand(
+    matchedTarget.targetSpec,
+    commandText,
+    rawTranscript,
+    Math.max(confidence, 0.72),
+    "named",
+    destinationText
+  );
+}
+
 function parseRoleCommand(commandText, rawTranscript) {
   const tokens = cleanCommandText(commandText).split(" ").filter(Boolean);
   if (tokens.length < 3) {
@@ -516,11 +560,16 @@ function parseTargetCommand(commandText, rawTranscript) {
   }
 
   if (!bestAction) {
-    return null;
+    return parseFuzzyDragShortcut(firstWord, remainder, commandText, rawTranscript, 0.66);
   }
 
   if (bestAction.type === "drag") {
-    return parseDragDestination(remainder, commandText, rawTranscript, bestAction.confidence);
+    const parsedDrag = parseDragDestination(remainder, commandText, rawTranscript, bestAction.confidence);
+    if (parsedDrag) {
+      return parsedDrag;
+    }
+
+    return parseFuzzyDragShortcut(firstWord, remainder, commandText, rawTranscript, bestAction.confidence);
   }
 
   const targetSpec = parseTargetSpec(remainder);
@@ -569,3 +618,6 @@ module.exports = {
   similarityScore,
   stripWakeWordPrefix,
 };
+
+
+

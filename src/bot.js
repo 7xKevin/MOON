@@ -449,7 +449,7 @@ function createBot({ config, store }) {
 
   function normalizeChannelLookup(input) {
     return normalizeText(input)
-      .replace(/\b(?:voice|vc|room|channel|call)\b/g, " ")
+      .replace(/\b(?:voice|vc|bc|room|channel|call)\b/g, " ")
       .replace(/\s+/g, " ")
       .trim();
   }
@@ -1588,6 +1588,7 @@ function createBot({ config, store }) {
 module.exports = {
   createBot,
 };
+
 
 
 
