@@ -8,7 +8,7 @@
     <script src="/static/theme.js" defer></script>
     <script src="/static/app.js" defer></script>
   </head>
-  <body>
+  <body class="landing-page">
     <div class="layout">
       <aside class="sidebar">
         <a class="brand" href="/">
@@ -78,7 +78,7 @@
                 <% } else { %>
                   <a class="button primary" href="/login">Connect Discord</a>
                 <% } %>
-                <a class="button" href="#command-system">See How It Works</a>
+                <a class="button" href="/dashboard">View Server Controls</a>
               </div>
               <div class="landing-stat-row">
                 <div class="landing-stat">
@@ -92,6 +92,16 @@
                 <div class="landing-stat">
                   <strong>Live moderation</strong>
                   <span>Move, mute, disconnect, lock, and role-manage without typing mid-game.</span>
+                </div>
+              </div>
+              <div class="landing-inline-info">
+                <div class="landing-list-item">
+                  <strong>Transcribe</strong>
+                  <span class="muted">Groq Whisper Large v3 converts voice to text.</span>
+                </div>
+                <div class="landing-list-item">
+                  <strong>Execute</strong>
+                  <span class="muted">Deterministic matching runs only known commands in a safe order.</span>
                 </div>
               </div>
             </div>
@@ -116,66 +126,6 @@
               </div>
             </div>
           </aside>
-        </section>
-
-        <section class="landing-grid" id="command-system">
-          <article class="card">
-            <div class="card-body stack">
-              <div>
-                <span class="eyebrow">Why it works</span>
-                <h2 class="section-title" style="margin-top: 10px;">Built for noisy real-time voice channels</h2>
-                <p class="section-lead">
-                  MOON keeps the command system short and repeatable, then matches the transcript against a
-                  fixed command list instead of trying to understand free-form speech.
-                </p>
-              </div>
-              <div class="quick-grid">
-                <div class="quick-item">
-                  <strong>Transcribe</strong>
-                  <span class="muted">Groq Whisper Large v3 converts voice to text.</span>
-                </div>
-                <div class="quick-item">
-                  <strong>Match</strong>
-                  <span class="muted">Deterministic similarity matching chooses only known commands.</span>
-                </div>
-                <div class="quick-item">
-                  <strong>Resolve</strong>
-                  <span class="muted">Users, channels, and roles are matched against live guild data.</span>
-                </div>
-                <div class="quick-item">
-                  <strong>Execute</strong>
-                  <span class="muted">Discord actions run in a safe, predictable order.</span>
-                </div>
-              </div>
-            </div>
-          </article>
-
-          <article class="card">
-            <div class="card-body stack">
-              <div>
-                <span class="eyebrow">What admins control</span>
-                <h2 class="section-title" style="margin-top: 10px;">Everything that matters stays in your hands</h2>
-              </div>
-              <div class="landing-list">
-                <div class="landing-list-item">
-                  <strong>Access rules</strong>
-                  <span class="muted">Allow commands by Discord admin, user ID, or role ID.</span>
-                </div>
-                <div class="landing-list-item">
-                  <strong>Voice behavior</strong>
-                  <span class="muted">Set wake word, silence cutoff, cooldown, and transcript visibility.</span>
-                </div>
-                <div class="landing-list-item">
-                  <strong>Command safety</strong>
-                  <span class="muted">Toggle drag, mute, disconnect, and lock actions per guild.</span>
-                </div>
-                <div class="landing-list-item">
-                  <strong>Deterministic learning</strong>
-                  <span class="muted">Users see the same command catalog in Discord and on the website.</span>
-                </div>
-              </div>
-            </div>
-          </article>
         </section>
       </main>
     </div>
