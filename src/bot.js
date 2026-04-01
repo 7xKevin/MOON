@@ -1036,8 +1036,11 @@ function createBot({ config, store }) {
           return;
         }
 
-        await connectToMemberChannel(message.member, message.channel);
-        await message.reply(`Listening in **${message.member.voice.channel.name}**.`);
+        const session = await connectToMemberChannel(message.member, message.channel);
+        const wakeWordSummary = session.runtimeVoiceSettings.requireWakeWord
+          ? `Wake word: **${session.runtimeVoiceSettings.wakeWord}**.`
+          : `Wake word optional. Current wake word: **${session.runtimeVoiceSettings.wakeWord}**.`;
+        await message.reply(`Listening in **${message.member.voice.channel.name}**. ${wakeWordSummary}`);
         return;
       }
 
