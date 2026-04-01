@@ -361,7 +361,7 @@ html[data-theme="dark"] button:hover {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  padding-bottom: 18px;
+  padding-bottom: 28px;
 }
 
 .landing-page .topbar {
