@@ -11,6 +11,7 @@ const { getVoiceCommandGuide, parseVoiceCommand } = require("./commandParser");
 const { transcribePcmBuffer } = require("./transcriber");
 const {
   findRoleByName,
+  findTextChannelByName,
   findVoiceChannelByName,
   formatMemberList,
   formatResolutionFailures,
@@ -232,6 +233,91 @@ function createBot({ config, store }) {
       }
 
       return left.capturedAt - right.capturedAt;
+    });
+  }
+
+  function stopSpamJob(guildId) {
+    const job = spamJobs.get(guildId);
+    if (!job) {
+      return false;
+    }
+
+    job.cancelled = true;
+    spamJobs.delete(guildId);
+    return true;
+  }
+
+  async function resolveTextChannel(guild, channelName) {
+    return findTextChannelByName(guild, channelName);
+  }
+
+  function canSendText(channel, botMember) {
+    if (!channel?.isTextBased?.()) {
+      return false;
+    }
+
+    if (!botMember) {
+      return false;
+    }
+
+    const permissions = channel.permissionsFor(botMember);
+    return Boolean(
+      permissions?.has(PermissionsBitField.Flags.ViewChannel) &&
+        permissions.has(PermissionsBitField.Flags.SendMessages)
+    );
+  }
+
+  async function sendPlainText(channel, content) {
+    return channel.send({
+      content,
+      allowedMentions: {
+        parse: [],
+      },
+    });
+  }
+
+  async function sendMentionText(channel, members) {
+    const content = members.map((member) => '<@' + member.id + '>').join(' ');
+    return channel.send({
+      content,
+      allowedMentions: {
+        users: members.map((member) => member.id),
+        roles: [],
+        parse: [],
+      },
+    });
+  }
+
+  function startSpamJob(guild, channel, message, count) {
+    stopSpamJob(guild.id);
+    const job = { cancelled: false };
+    spamJobs.set(guild.id, job);
+
+    (async () => {
+      try {
+        for (let index = 0; index < count; index += 1) {
+          if (job.cancelled) {
+            break;
+          }
+
+          await sendPlainText(channel, message);
+
+          if (index < count - 1) {
+            await wait(1200);
+          }
+        }
+      } catch (error) {
+        log("Spam job failed", error?.details ?? error);
+      } finally {
+        if (spamJobs.get(guild.id) === job) {
+          spamJobs.delete(guild.id);
+        }
+      }
+    })().catch((error) => {
+      log("Spam job failed", error?.details ?? error);
+      if (spamJobs.get(guild.id) === job) {
+        spamJobs.delete(guild.id);
+      }
     });
   }
 
