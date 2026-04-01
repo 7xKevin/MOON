@@ -435,7 +435,7 @@ html[data-theme="dark"] button:hover {
 
 .landing-orbit {
   position: relative;
-  min-height: 220px;
+  min-height: 340px;
   display: grid;
   place-items: center;
 }
@@ -450,22 +450,6 @@ html[data-theme="dark"] button:hover {
   inset: 28px;
 }
 
-.hero-logo .moon-logo-orbit-one {
-  width: 26px;
-  height: 26px;
-  top: 10px;
-  right: 18px;
-  animation: moon-orbit-pulse 4.2s ease-in-out infinite;
-}
-
-.hero-logo .moon-logo-orbit-two {
-  width: 18px;
-  height: 18px;
-  bottom: 14px;
-  left: 12px;
-  animation: moon-orbit-pulse 5.3s ease-in-out infinite reverse;
-}
-
 .landing-orbit-glow {
   position: absolute;
   width: 220px;
@@ -476,14 +460,64 @@ html[data-theme="dark"] button:hover {
   animation: moon-glow-breathe 5.6s ease-in-out infinite;
 }
 
+.hero-orbit {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform-origin: center;
+  z-index: 3;
+  animation: moon-orbit-rotate 14s linear infinite;
+}
+
+.hero-orbit-large {
+  width: 210px;
+  height: 210px;
+  margin-left: -105px;
+  margin-top: -105px;
+}
+
+.hero-orbit-small {
+  width: 170px;
+  height: 170px;
+  margin-left: -85px;
+  margin-top: -85px;
+  animation-duration: 10s;
+  animation-direction: reverse;
+}
+
+.hero-orbit-dot {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: linear-gradient(160deg, #ffe8a3 0%, #ffbf47 100%);
+  box-shadow: 0 4px 16px rgba(255, 191, 71, 0.4);
+  animation: moon-orbit-pulse 4.4s ease-in-out infinite;
+}
+
+.hero-orbit-dot-large {
+  width: 26px;
+  height: 26px;
+  top: -13px;
+}
+
+.hero-orbit-dot-small {
+  width: 18px;
+  height: 18px;
+  bottom: -9px;
+  animation-duration: 5.2s;
+}
+
 .landing-command-stack {
-  display: grid;
-  gap: 10px;
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
 }
 
 .landing-command-chip {
-  width: fit-content;
-  max-width: 100%;
+  position: absolute;
+  width: max-content;
+  max-width: 220px;
   padding: 10px 12px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
@@ -495,19 +529,26 @@ html[data-theme="dark"] button:hover {
   animation: moon-chip-drift 7.2s ease-in-out infinite;
 }
 
-.landing-command-chip:nth-child(2n) {
-  justify-self: end;
+.chip-top-left {
+  top: 18px;
+  left: 10px;
 }
 
-.landing-command-chip:nth-child(2) {
+.chip-top-right {
+  top: 54px;
+  right: 6px;
   animation-delay: 0.8s;
 }
 
-.landing-command-chip:nth-child(3) {
+.chip-bottom-left {
+  left: 20px;
+  bottom: 52px;
   animation-delay: 1.6s;
 }
 
-.landing-command-chip:nth-child(4) {
+.chip-bottom-right {
+  right: 4px;
+  bottom: 26px;
   animation-delay: 2.4s;
 }
 
@@ -747,6 +788,15 @@ textarea {
 
   .landing-copy .headline {
     max-width: none;
+  }
+
+  .landing-orbit {
+    min-height: 300px;
+  }
+
+  .landing-command-chip {
+    max-width: 170px;
+    font-size: 0.84rem;
   }
 }
 
@@ -988,6 +1038,16 @@ button.is-loading {
   }
 }
 
+@keyframes moon-orbit-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @keyframes moon-glow-breathe {
   0%,
   100% {
@@ -1022,8 +1082,8 @@ button.is-loading {
   }
 
   .hero-logo,
-  .hero-logo .moon-logo-orbit-one,
-  .hero-logo .moon-logo-orbit-two,
+  .hero-orbit,
+  .hero-orbit-dot,
   .landing-orbit-glow,
   .landing-command-chip {
     animation: none;
