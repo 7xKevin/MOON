@@ -98,6 +98,10 @@ if (config.SERVICE_MODE === "bot" || config.SERVICE_MODE === "all") {
       "You must configure GROQ_API_KEY or both WHISPER_CPP_PATH and WHISPER_MODEL_PATH when running the bot."
     );
   }
+
+  if (process.env.NODE_ENV === "production") {
+    requireSetting("DATABASE_URL", "running the bot in production with dashboard-managed settings");
+  }
 }
 
 if (config.SERVICE_MODE === "web" || config.SERVICE_MODE === "all") {

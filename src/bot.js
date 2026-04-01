@@ -915,7 +915,7 @@ function createBot({ config, store }) {
       throw createUserFacingError("Join a voice channel first, then use !join.");
     }
 
-    const ownerUserId = config.CONTROLLER_USER_ID ?? member.id;
+    const ownerUserId = member.id;
     const guildSettings = await getGuildSettings(member.guild, ownerUserId);
     if (!guildSettings.botEnabled) {
       throw createUserFacingError("MOON is paused for this server in the dashboard.");
