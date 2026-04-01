@@ -103,3 +103,5 @@ If `GROQ_API_KEY` is present, MOON uses Groq first and only falls back to local 
 - The dashboard exposes `GET /healthz` for a simple health check.
 
 
+
+- Lower default speech timing is tuned for faster Discord command response.

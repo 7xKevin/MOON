@@ -418,9 +418,13 @@ function createBot({ config, store }) {
 
   function getRuntimeVoiceSettings(guildSettings) {
     const configuredCooldownMs = guildSettings.commandCooldownMs || config.COMMAND_COOLDOWN_MS;
-    const commandCooldownMs = configuredCooldownMs === 2500
+    const configuredSilenceMs = guildSettings.transcriptionSilenceMs || config.TRANSCRIPTION_SILENCE_MS;
+    const commandCooldownMs = configuredCooldownMs === 2500 || configuredCooldownMs === 900
       ? config.COMMAND_COOLDOWN_MS
       : configuredCooldownMs;
+    const transcriptionSilenceMs = configuredSilenceMs === 1200
+      ? config.TRANSCRIPTION_SILENCE_MS
+      : configuredSilenceMs;
 
     return {
       wakeWord: guildSettings.wakeWord || config.WAKE_WORD,
@@ -428,8 +432,7 @@ function createBot({ config, store }) {
         guildSettings.requireWakeWord === undefined
           ? config.REQUIRE_WAKE_WORD
           : guildSettings.requireWakeWord,
-      transcriptionSilenceMs:
-        guildSettings.transcriptionSilenceMs || config.TRANSCRIPTION_SILENCE_MS,
+      transcriptionSilenceMs: Math.max(350, transcriptionSilenceMs),
       commandCooldownMs: Math.max(250, commandCooldownMs),
       transcriptionEnabled:
         guildSettings.transcriptionEnabled === undefined ? true : guildSettings.transcriptionEnabled,
@@ -753,12 +756,6 @@ function createBot({ config, store }) {
       return;
     }
 
-    const now = Date.now();
-    const cooldownRemaining = session.lastCommandAt + session.runtimeVoiceSettings.commandCooldownMs - now;
-    if (cooldownRemaining > 0) {
-      await wait(cooldownRemaining);
-    }
-
     const latestSession = getSession(guild.id);
     if (!latestSession) {
       return;
@@ -781,6 +778,11 @@ function createBot({ config, store }) {
 
     if (shouldPostTranscripts(guildSettings)) {
       await sendStatus(guild, `Transcript from **${speaker.displayName}**: \`${transcript}\``);
+    }
+
+    const cooldownRemaining = latestSession.lastCommandAt + latestSession.runtimeVoiceSettings.commandCooldownMs - Date.now();
+    if (cooldownRemaining > 0) {
+      await wait(cooldownRemaining);
     }
 
     latestSession.lastCommandAt = Date.now();
@@ -1117,3 +1119,4 @@ function createBot({ config, store }) {
 module.exports = {
   createBot,
 };
+

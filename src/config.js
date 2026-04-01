@@ -63,8 +63,8 @@ const schema = z.object({
   WHISPER_BEST_OF: z.coerce.number().int().positive().default(5),
   WHISPER_TEMPERATURE: z.coerce.number().min(0).max(1).default(0),
   TEMP_DIR: z.string().default(path.join(process.cwd(), "tmp")),
-  TRANSCRIPTION_SILENCE_MS: z.coerce.number().int().positive().default(1200),
-  COMMAND_COOLDOWN_MS: z.coerce.number().int().nonnegative().default(900),
+  TRANSCRIPTION_SILENCE_MS: z.coerce.number().int().positive().default(750),
+  COMMAND_COOLDOWN_MS: z.coerce.number().int().nonnegative().default(600),
   DEBUG_TRANSCRIPTS: booleanFromEnv.default(false),
   DASHBOARD_GUILD_CACHE_MS: z.coerce.number().int().positive().default(120000),
 });
