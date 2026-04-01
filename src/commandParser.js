@@ -294,6 +294,17 @@ function buildRoleCommand(type, targetSpec, roleName, transcript, rawTranscript,
   };
 }
 
+function buildTextCommand(type, transcript, rawTranscript, confidence, extra = {}) {
+  return {
+    type,
+    transcript,
+    rawTranscript,
+    confidence,
+    matchType: 'deterministic',
+    ...extra,
+  };
+}
+
 function matchLockCommand(tokens, commandText, rawTranscript) {
   if (!tokens.length) {
     return null;
@@ -504,7 +515,7 @@ function parseTextCommand(tokens, commandText, rawTranscript) {
   const spamMatch = detectAction(tokens, [{ type: 'spam', word: 'spam' }], 0.72);
   if (spamMatch) {
     const remainder = cleanCommandText(tokens.slice(1).join(' '));
-    const match = remainder.match(/^(d{1,2}) in (.+?) text (.+)$/);
+    const match = remainder.match(/^(\d{1,2}) in (.+?) text (.+)$/);
     if (!match) {
       return null;
     }
@@ -546,6 +557,7 @@ function parseVoiceCommand(transcript, options = {}) {
     matchLockCommand(tokens, commandText, normalized) ||
     parseRoleCommand(tokens, commandText, normalized) ||
     parseDragCommand(tokens, commandText, normalized) ||
+    parseTextCommand(tokens, commandText, normalized) ||
     parseTargetActionCommand(tokens, commandText, normalized)
   );
 }
