@@ -52,7 +52,7 @@ function normalizeGuildSettings(input = {}, defaults = {}) {
     preferredVoiceChannelId: input.preferredVoiceChannelId ? String(input.preferredVoiceChannelId).trim() : "",
     botPresent: input.botPresent === true,
     botLastSeenAt: input.botLastSeenAt ? new Date(input.botLastSeenAt).toISOString() : null,
-    debugTranscripts: input.debugTranscripts === true,
+    debugTranscripts: input.debugTranscripts === true || input.showTranscriptionsInChat === true,
     transcriptionEnabled: input.transcriptionEnabled !== false,
     wakeWord: String(input.wakeWord ?? defaults.wakeWord ?? "moon").trim() || "moon",
     requireWakeWord:

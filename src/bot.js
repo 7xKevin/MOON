@@ -368,6 +368,10 @@ function createBot({ config, store }) {
     return guildSettings.allowedRoleIds.some((roleId) => member.roles.cache.has(roleId));
   }
 
+  function shouldPostTranscripts(guildSettings) {
+    return guildSettings?.debugTranscripts === true;
+  }
+
   function isIgnorableTranscript(transcript) {
     const normalized = normalizeText(transcript);
 
@@ -775,7 +779,7 @@ function createBot({ config, store }) {
       return;
     }
 
-    if (guildSettings.debugTranscripts) {
+    if (shouldPostTranscripts(guildSettings)) {
       await sendStatus(guild, `Transcript from **${speaker.displayName}**: \`${transcript}\``);
     }
 

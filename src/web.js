@@ -168,7 +168,7 @@ function mapGuildForm(req, config, existingSettings = {}) {
     allowedRoleIds: parseStringList(req.body.allowedRoleIds),
     preferredTextChannelId: req.body.preferredTextChannelId,
     preferredVoiceChannelId: req.body.preferredVoiceChannelId,
-    debugTranscripts: parseBoolean(req.body.debugTranscripts),
+    debugTranscripts: parseBoolean(req.body.showTranscriptionsInChat ?? req.body.debugTranscripts),
     transcriptionEnabled: parseBoolean(req.body.transcriptionEnabled),
     wakeWord: req.body.wakeWord,
     requireWakeWord: parseBoolean(req.body.requireWakeWord),
