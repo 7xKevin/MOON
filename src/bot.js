@@ -7,7 +7,7 @@ const {
   joinVoiceChannel,
 } = require("@discordjs/voice");
 const prism = require("prism-media");
-const { getGuildInterpreterContext, interpretVoiceCommand } = require("./commandInterpreter");
+const { getVoiceCommandGuide, parseVoiceCommand } = require("./commandParser");
 const { transcribePcmBuffer } = require("./transcriber");
 const {
   findRoleByName,
@@ -617,11 +617,10 @@ function createBot({ config, store }) {
       return;
     }
 
-    const command = await interpretVoiceCommand(transcript, {
+    const command = parseVoiceCommand(transcript, {
       wakeWord: latestSession.runtimeVoiceSettings?.wakeWord ?? session.runtimeVoiceSettings.wakeWord,
       requireWakeWord:
         latestSession.runtimeVoiceSettings?.requireWakeWord ?? session.runtimeVoiceSettings.requireWakeWord,
-      context: getGuildInterpreterContext(guild, speaker, controller),
     });
     if (!command) {
       log(`Ignored transcript from ${speaker.user.tag}: ${transcript}`);
@@ -826,32 +825,19 @@ function createBot({ config, store }) {
 
   function getHelpText(guildSettings) {
     const runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings, config);
-    const wakePrefix = runtimeVoiceSettings.requireWakeWord
-      ? `${runtimeVoiceSettings.wakeWord} `
-      : "";
 
     return [
       "**MOON commands**",
-      `\`${config.PREFIX}join\` - join your current voice channel and listen for voice commands`,
+      `\`${config.PREFIX}join\` - join your current voice channel and show the global voice commands`,
       `\`${config.PREFIX}leave\` - disconnect MOON`,
       `\`${config.PREFIX}dashboard\` - open the admin dashboard`,
       `\`${config.PREFIX}help\` - show this help`,
       "",
-      "**Voice commands**",
       runtimeVoiceSettings.requireWakeWord
-        ? `Say the wake word first, for example \`${runtimeVoiceSettings.wakeWord}, lock the vc\``
-        : "Speak the command phrase directly.",
-      `\`${wakePrefix}drag <name> here\``,
-      `\`${wakePrefix}drag <name> to general\``,
-      `\`${wakePrefix}drag all to general\``,
-      `\`${wakePrefix}drag me and aditya to admin room\``,
-      `\`${wakePrefix}mute <name>\``,
-      `\`${wakePrefix}unmute <name>\``,
-      `\`${wakePrefix}kick <name>\``,
-      `\`${wakePrefix}give <name> <role> role\``,
-      `\`${wakePrefix}remove <role> role from <name>\``,
-      `\`${wakePrefix}lock the vc\``,
-      `\`${wakePrefix}unlock the vc\``,
+        ? `Wake word required: **${runtimeVoiceSettings.wakeWord}**`
+        : `Wake word optional. Current wake word: **${runtimeVoiceSettings.wakeWord}**`,
+      "",
+      getVoiceCommandGuide(runtimeVoiceSettings),
     ].join("\n");
   }
 
@@ -908,6 +894,7 @@ function createBot({ config, store }) {
           ? `Wake word: **${session.runtimeVoiceSettings.wakeWord}**.`
           : `Wake word optional. Current wake word: **${session.runtimeVoiceSettings.wakeWord}**.`;
         await message.reply(`Listening in **${message.member.voice.channel.name}**. ${wakeWordSummary}`);
+        await sendStatusToChannel(message.guild, session.textChannelId, getVoiceCommandGuide(session.runtimeVoiceSettings));
         return;
       }
 
@@ -984,4 +971,6 @@ function createBot({ config, store }) {
 module.exports = {
   createBot,
 };
+
+
 

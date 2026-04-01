@@ -50,9 +50,6 @@ const schema = z.object({
   GROQ_API_KEY: optionalString,
   GROQ_STT_MODEL: z.string().default("whisper-large-v3"),
   GROQ_STT_URL: z.string().default("https://api.groq.com/openai/v1/audio/transcriptions"),
-  GROQ_COMMAND_MODEL: z.string().default("llama-3.3-70b-versatile"),
-  GROQ_COMMAND_URL: z.string().default("https://api.groq.com/openai/v1/chat/completions"),
-  AI_COMMAND_INTERPRETER_ENABLED: booleanFromEnv.default(true),
   WHISPER_CPP_PATH: optionalString,
   WHISPER_MODEL_PATH: optionalString,
   WHISPER_SERVER_PATH: optionalString,
@@ -61,7 +58,7 @@ const schema = z.object({
   WHISPER_LANGUAGE: z.string().default("en"),
   WHISPER_PROMPT: z
     .string()
-    .default("Discord voice commands only. Prioritize short admin commands like lock, unlock, mute, unmute, kick, give role, remove role, drag people here, and move people to named voice channels like general or waiting room. Ignore acknowledgements, filler words, and unrelated conversation when possible. User names may include punctuation or repeated vowels."),
+    .default("Short deterministic Discord voice commands only. Examples: lock vc, unlock vc, mute me, mute aditya, unmute aditya, kick aditya, drag me here, drag me to general, drag aditya to waiting room, drag all from general to admin, role add aditya role moderator, role remove aditya role moderator. Ignore unrelated conversation."),
   WHISPER_BEAM_SIZE: z.coerce.number().int().positive().default(5),
   WHISPER_BEST_OF: z.coerce.number().int().positive().default(5),
   WHISPER_TEMPERATURE: z.coerce.number().min(0).max(1).default(0),
@@ -133,4 +130,6 @@ module.exports = {
     isProduction: process.env.NODE_ENV === "production",
   },
 };
+
+
 
