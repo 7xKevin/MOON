@@ -596,7 +596,7 @@ function createBot({ config, store }) {
 
     const guildSettings = await getGuildSettings(guild, session.ownerUserId);
     session.guildSettingsSnapshot = guildSettings;
-    session.runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings);
+    session.runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings, config);
 
     if (!memberCanUseVoiceCommands(speaker, session, guildSettings)) {
       return;
@@ -711,7 +711,7 @@ function createBot({ config, store }) {
 
     const guildSettings = session.guildSettingsSnapshot ?? (await getGuildSettings(guild, session.ownerUserId));
     session.guildSettingsSnapshot = guildSettings;
-    session.runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings);
+    session.runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings, config);
 
     if (!memberCanUseVoiceCommands(speaker, session, guildSettings)) {
       return;
@@ -809,7 +809,7 @@ function createBot({ config, store }) {
       focusUntil: 0,
       lastCommandAt: 0,
       guildSettingsSnapshot: guildSettings,
-      runtimeVoiceSettings: getRuntimeVoiceSettings(guildSettings),
+      runtimeVoiceSettings: getRuntimeVoiceSettings(guildSettings, config),
     };
 
     connection.receiver.speaking.on("start", onSpeakingStart);
@@ -819,7 +819,7 @@ function createBot({ config, store }) {
   }
 
   function getHelpText(guildSettings) {
-    const runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings);
+    const runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings, config);
     const wakePrefix = runtimeVoiceSettings.requireWakeWord
       ? `${runtimeVoiceSettings.wakeWord} `
       : "";
@@ -978,6 +978,7 @@ function createBot({ config, store }) {
 module.exports = {
   createBot,
 };
+
 
 
 
