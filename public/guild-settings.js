@@ -1,4 +1,6 @@
 (function () {
+  let boundForm = null;
+
   function serializeForm(form) {
     const state = {};
 
@@ -7,12 +9,12 @@
         continue;
       }
 
-      if (field.name === "csrfToken" || field.name === "guildName") {
+      if (field.name === 'csrfToken' || field.name === 'guildName') {
         continue;
       }
 
-      if (field.type === "checkbox") {
-        state[field.name] = field.checked ? "1" : "0";
+      if (field.type === 'checkbox') {
+        state[field.name] = field.checked ? '1' : '0';
         continue;
       }
 
@@ -28,7 +30,7 @@
         continue;
       }
 
-      if (field.type === "checkbox") {
+      if (field.type === 'checkbox') {
         field.defaultChecked = field.checked;
         continue;
       }
@@ -48,60 +50,61 @@
       });
   }
 
-  document.addEventListener("DOMContentLoaded", function () {
-    const form = document.querySelector("[data-settings-form]");
-    const saveBar = document.querySelector("[data-save-bar]");
-    const resetButton = document.querySelector("[data-reset-form]");
-    const notice = document.querySelector("[data-auto-dismiss]");
+  function init() {
+    const form = document.querySelector('[data-settings-form]');
+    const saveBar = document.querySelector('[data-save-bar]');
+    const resetButton = document.querySelector('[data-reset-form]');
+    const notice = document.querySelector('[data-auto-dismiss]');
     const saveButton = saveBar ? saveBar.querySelector('button[type="submit"]') : null;
     const ui = window.MOON_UI || {};
 
     if (notice) {
-      ui.showToast?.(notice.textContent.trim(), "success");
+      ui.showToast?.(notice.textContent.trim(), 'success');
       notice.remove();
       if (window.history?.replaceState) {
         window.history.replaceState({}, document.title, window.location.pathname);
       }
     }
 
-    if (!form || !saveBar) {
+    if (!form || !saveBar || boundForm === form) {
       return;
     }
 
+    boundForm = form;
     let initialState = serializeForm(form);
     let isSaving = false;
-    const defaultSaveLabel = saveButton ? saveButton.textContent : "Save Changes";
+    const defaultSaveLabel = saveButton ? saveButton.textContent : 'Save Changes';
 
     function syncDirtyState() {
       const isDirty = serializeForm(form) !== initialState;
-      saveBar.classList.toggle("is-visible", isDirty && !isSaving);
+      saveBar.classList.toggle('is-visible', isDirty && !isSaving);
     }
 
     function setSavingState(active) {
       isSaving = active;
       if (saveButton) {
-        saveButton.classList.toggle("is-loading", active);
+        saveButton.classList.toggle('is-loading', active);
         saveButton.disabled = active;
-        saveButton.textContent = active ? "Saving..." : defaultSaveLabel;
+        saveButton.textContent = active ? 'Saving...' : defaultSaveLabel;
       }
       if (resetButton) {
         resetButton.disabled = active;
       }
-      ui.setPageLoading?.(active, active ? "Saving changes..." : "Loading...");
-      saveBar.classList.toggle("is-visible", !active && serializeForm(form) !== initialState);
+      ui.setPageLoading?.(active, active ? 'Saving changes...' : 'Loading...');
+      saveBar.classList.toggle('is-visible', !active && serializeForm(form) !== initialState);
     }
 
-    form.addEventListener("input", syncDirtyState);
-    form.addEventListener("change", syncDirtyState);
+    form.addEventListener('input', syncDirtyState);
+    form.addEventListener('change', syncDirtyState);
 
     if (resetButton) {
-      resetButton.addEventListener("click", function () {
+      resetButton.addEventListener('click', function () {
         form.reset();
         syncDirtyState();
       });
     }
 
-    form.addEventListener("submit", async function (event) {
+    form.addEventListener('submit', async function (event) {
       event.preventDefault();
       if (isSaving) {
         return;
@@ -111,10 +114,10 @@
 
       try {
         const response = await fetch(form.action, {
-          method: form.method || "POST",
+          method: form.method || 'POST',
           headers: {
-            Accept: "application/json",
-            "X-Requested-With": "fetch",
+            Accept: 'application/json',
+            'X-Requested-With': 'fetch',
           },
           body: new FormData(form),
         });
@@ -124,19 +127,23 @@
         }
 
         const payload = await response.json().catch(function () {
-          return { ok: true, message: "Settings saved." };
+          return { ok: true, message: 'Settings saved.' };
         });
         snapshotCurrentValuesAsDefaults(form);
         initialState = serializeForm(form);
         syncDirtyState();
-        ui.showToast?.(payload.message || "Settings saved.", "success");
+        ui.showToast?.(payload.message || 'Settings saved.', 'success');
       } catch (error) {
-        ui.showToast?.(error.message || "Couldn't save settings.", "error");
+        ui.showToast?.(error.message || "Couldn't save settings.", 'error');
       } finally {
         setSavingState(false);
       }
     });
 
     syncDirtyState();
-  });
+  }
+
+  window.MOON_GUILD_SETTINGS = {
+    init,
+  };
 })();

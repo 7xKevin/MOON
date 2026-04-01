@@ -1,4 +1,6 @@
 (function () {
+  let navigationInFlight = false;
+
   function ensureToastStack() {
     let stack = document.querySelector('[data-toast-stack]');
     if (!stack) {
@@ -54,6 +56,18 @@
     loader.classList.toggle('is-visible', Boolean(active));
   }
 
+  function runPageInitializers() {
+    window.MOON_THEME?.init?.();
+    window.MOON_GUILD_SETTINGS?.init?.();
+  }
+
+  function markPageReady() {
+    requestAnimationFrame(function () {
+      document.body.classList.add('page-ready');
+      document.body.classList.remove('page-leaving');
+    });
+  }
+
   function isPlainPrimaryClick(event) {
     return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
   }
@@ -70,22 +84,91 @@
 
     try {
       const url = new URL(link.href, window.location.href);
-      return url.origin === window.location.origin;
+      if (url.origin !== window.location.origin) {
+        return false;
+      }
+
+      if (url.pathname === '/login' || url.pathname === '/logout' || url.pathname.startsWith('/auth/')) {
+        return false;
+      }
+
+      return true;
     } catch {
       return false;
     }
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
-    requestAnimationFrame(function () {
-      document.body.classList.add('page-ready');
+  async function fetchDocument(url) {
+    const response = await fetch(url, {
+      headers: {
+        'X-Requested-With': 'navigation',
+      },
+      credentials: 'same-origin',
     });
+
+    if (!response.ok) {
+      throw new Error('Navigation failed.');
+    }
+
+    const html = await response.text();
+    const parser = new DOMParser();
+    return parser.parseFromString(html, 'text/html');
+  }
+
+  function replacePageContent(nextDocument) {
+    const nextLayout = nextDocument.querySelector('.layout');
+    const currentLayout = document.querySelector('.layout');
+
+    if (!nextLayout || !currentLayout) {
+      throw new Error('Could not update page layout.');
+    }
+
+    document.title = nextDocument.title;
+    document.body.classList.remove('page-ready');
+    currentLayout.replaceWith(nextLayout);
+    runPageInitializers();
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    markPageReady();
+  }
+
+  async function navigateTo(url, options) {
+    if (navigationInFlight) {
+      return;
+    }
+
+    const settings = Object.assign({ pushState: true, label: 'Opening...' }, options || {});
+    navigationInFlight = true;
+    document.body.classList.add('page-leaving');
+    setPageLoading(true, settings.label);
+
+    try {
+      const nextDocument = await fetchDocument(url);
+      replacePageContent(nextDocument);
+      if (settings.pushState) {
+        window.history.pushState({}, '', url);
+      }
+    } catch (error) {
+      window.location.href = url;
+      return;
+    } finally {
+      navigationInFlight = false;
+      setPageLoading(false);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    runPageInitializers();
+    markPageReady();
   });
 
   window.addEventListener('pageshow', function () {
-    document.body.classList.add('page-ready');
-    document.body.classList.remove('page-leaving');
+    runPageInitializers();
+    markPageReady();
     setPageLoading(false);
+  });
+
+  window.addEventListener('popstate', function () {
+    navigateTo(window.location.href, { pushState: false, label: 'Loading...' });
   });
 
   document.addEventListener('click', function (event) {
@@ -100,15 +183,13 @@
     }
 
     event.preventDefault();
-    document.body.classList.add('page-leaving');
-    setPageLoading(true, 'Opening...');
-    window.setTimeout(function () {
-      window.location.href = targetUrl.href;
-    }, 150);
+    navigateTo(targetUrl.href, { pushState: true, label: 'Opening...' });
   });
 
   window.MOON_UI = {
     showToast,
     setPageLoading,
+    navigateTo,
+    runPageInitializers,
   };
 })();
