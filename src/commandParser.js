@@ -319,23 +319,61 @@ function parseTargetSpec(targetText) {
   };
 }
 
+function buildDragCommand(targetSpec, commandText, rawTranscript, confidence, destinationType, destinationName, sourceChannelName = null) {
+  return {
+    type: "drag",
+    targetSpec,
+    targetName: targetSpec.names[0] ?? targetSpec.source,
+    destinationType,
+    destinationName,
+    sourceChannelName,
+    transcript: commandText,
+    rawTranscript,
+    confidence,
+  };
+}
+
 function parseDragDestination(remainder, commandText, rawTranscript, confidence) {
+  const fromPatterns = [
+    /^(.*?)\s+from\s+(.*?)\s+to\s+here$/,
+    /^(.*?)\s+from\s+(.*?)\s+to\s+(.*)$/,
+    /^(.*?)\s+from\s+(.*?)\s+into\s+(.*)$/,
+    /^(.*?)\s+from\s+(.*?)\s+in\s+(.*)$/,
+    /^(.*?)\s+from\s+(.*?)\s+here$/,
+  ];
+
+  for (const pattern of fromPatterns) {
+    const match = remainder.match(pattern);
+    if (!match) {
+      continue;
+    }
+
+    const targetSpec = parseTargetSpec(match[1]);
+    const sourceChannelName = cleanCommandText(match[2]);
+    const rawDestinationName = match[3] ?? "here";
+    const destinationName = cleanCommandText(rawDestinationName);
+    if (!targetSpec || !sourceChannelName) {
+      return null;
+    }
+
+    if (destinationName === "here") {
+      return buildDragCommand(targetSpec, commandText, rawTranscript, confidence, "here", null, sourceChannelName);
+    }
+
+    if (!destinationName) {
+      return null;
+    }
+
+    return buildDragCommand(targetSpec, commandText, rawTranscript, confidence, "named", destinationName, sourceChannelName);
+  }
+
   if (remainder.endsWith(" here")) {
     const targetSpec = parseTargetSpec(remainder.slice(0, -5));
     if (!targetSpec) {
       return null;
     }
 
-    return {
-      type: "drag",
-      targetSpec,
-      targetName: targetSpec.names[0] ?? targetSpec.source,
-      destinationType: "here",
-      destinationName: null,
-      transcript: commandText,
-      rawTranscript,
-      confidence,
-    };
+    return buildDragCommand(targetSpec, commandText, rawTranscript, confidence, "here", null);
   }
 
   const destinationPatterns = [
@@ -356,16 +394,7 @@ function parseDragDestination(remainder, commandText, rawTranscript, confidence)
       return null;
     }
 
-    return {
-      type: "drag",
-      targetSpec,
-      targetName: targetSpec.names[0] ?? targetSpec.source,
-      destinationType: "named",
-      destinationName,
-      transcript: commandText,
-      rawTranscript,
-      confidence,
-    };
+    return buildDragCommand(targetSpec, commandText, rawTranscript, confidence, "named", destinationName);
   }
 
   return null;
@@ -462,3 +491,4 @@ module.exports = {
   similarityScore,
   stripWakeWordPrefix,
 };
+

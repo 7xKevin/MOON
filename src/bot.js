@@ -594,6 +594,22 @@ function createBot({ config, store }) {
       return "I couldn't tell which voice channel members you meant.";
     }
 
+    if (first.reason === "source-channel-missing") {
+      return `I couldn't find a voice channel named **${first.label}**.`;
+    }
+
+    if (first.reason === "source-channel-ambiguous") {
+      return first.secondary
+        ? `I found multiple channels close to **${first.label}**: **${first.primary}** and **${first.secondary}**.`
+        : `I found multiple channels close to **${first.label}**.`;
+    }
+
+    if (first.reason === "empty-source-channel") {
+      return first.label
+        ? `No one is in the requested voice channel (**${first.label}**).`
+        : "No one is in the requested voice channel.";
+    }
+
     if (first.reason === "ambiguous") {
       return first.secondary
         ? `I heard \`${transcript}\`, but **${first.label}** looks ambiguous between **${first.primary}** and **${first.secondary}**.`
@@ -621,7 +637,32 @@ function createBot({ config, store }) {
     };
 
     if (targetSpec.kind === "channel") {
-      const sourceChannel = speaker.voice.channel ?? controller.voice.channel;
+      let sourceChannel = speaker.voice.channel ?? controller.voice.channel;
+
+      if (command.sourceChannelName) {
+        const sourceMatch = await findVoiceChannelByName(guild, command.sourceChannelName);
+        if (!sourceMatch.channel) {
+          return {
+            members: [],
+            failures: [{ label: command.sourceChannelName, reason: "source-channel-missing" }],
+          };
+        }
+
+        if (sourceMatch.ambiguous) {
+          return {
+            members: [],
+            failures: [{
+              label: command.sourceChannelName,
+              reason: "source-channel-ambiguous",
+              primary: sourceMatch.channel.name,
+              secondary: sourceMatch.secondChannel?.name || null,
+            }],
+          };
+        }
+
+        sourceChannel = sourceMatch.channel;
+      }
+
       if (!sourceChannel) {
         return {
           members: [],
@@ -629,8 +670,16 @@ function createBot({ config, store }) {
         };
       }
 
+      const members = getChannelTargetMembers(guild, sourceChannel);
+      if (!members.length) {
+        return {
+          members: [],
+          failures: [{ label: sourceChannel.name, reason: "empty-source-channel" }],
+        };
+      }
+
       return {
-        members: getChannelTargetMembers(guild, sourceChannel),
+        members,
         failures: [],
       };
     }
@@ -1351,6 +1400,8 @@ function createBot({ config, store }) {
 module.exports = {
   createBot,
 };
+
+
 
 
 
