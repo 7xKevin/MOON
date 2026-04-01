@@ -2,7 +2,7 @@
 
 MOON is a Discord voice-command bot with an admin dashboard.
 
-The repo now supports two runtime modes from the same codebase:
+The repo supports two runtime modes from the same codebase:
 
 - `bot`: Discord bot worker with voice capture and speech transcription
 - `web`: admin dashboard with Discord OAuth login and shared guild settings
@@ -26,14 +26,7 @@ For the hosted version, the best practical stack is:
 - `!join`, `!leave`, `!help`, `!dashboard`
 - Groq speech-to-text as the primary path
 - optional local `whisper.cpp` fallback
-- voice commands:
-  - `drag <name> here`
-  - `drag <name> to general`
-  - `mute <name>`
-  - `unmute <name>`
-  - `kick <name>`
-  - `lock the vc`
-  - `unlock the vc`
+- natural voice commands for drag, mute, kick, lock, unlock, disconnect, and role changes
 - session owner follow behavior
 - server-level safety toggles from dashboard settings
 
@@ -45,7 +38,7 @@ For the hosted version, the best practical stack is:
 - per-guild settings for:
   - bot enabled or paused
   - voice decoding enabled or disabled
-  - transcript debugging
+  - transcript visibility in Discord chat
   - wake word and speech timing
   - voice command user IDs
   - voice command role IDs
@@ -73,6 +66,10 @@ Key variables:
 - `WHISPER_CPP_PATH` and `WHISPER_MODEL_PATH` are optional local fallback settings
 - `WHISPER_LANGUAGE` defaults to `en`
 - `WHISPER_PROMPT` seeds the transcription model with Discord command context
+- `TRANSCRIPTION_SILENCE_MS` defaults to `650` for faster phrase cutoff
+- `COMMAND_COOLDOWN_MS` defaults to `400` for quicker back-to-back commands
+- `MIN_COMMAND_AUDIO_MS` defaults to `320` to drop obviously too-short clips early
+- `MAX_QUEUED_COMMAND_AGE_MS` defaults to `4500` to discard stale queued audio
 
 ## Railway deployment
 
@@ -98,10 +95,8 @@ If `GROQ_API_KEY` is present, MOON uses Groq first and only falls back to local 
 ## Notes
 
 - Groq STT uses the OpenAI-compatible transcription endpoint.
-- The bot still converts incoming Discord audio to `16kHz` mono WAV before transcription.
+- The bot converts incoming Discord audio to `16kHz` mono WAV before transcription.
+- The current latency-focused hot path reduces disk I/O for Groq by converting PCM to WAV in memory and dropping stale queue items early.
 - Local `whisper.cpp` is still supported as a fallback path, but it is no longer required when Groq is configured.
 - The dashboard exposes `GET /healthz` for a simple health check.
 
-
-
-- Lower default speech timing is tuned for faster Discord command response.

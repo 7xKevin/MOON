@@ -11,7 +11,7 @@ function isIgnorableTranscript(transcript) {
     return true;
   }
 
-  const noiseOnlyPatterns = [
+  const exactNoisePhrases = new Set([
     "blank audio",
     "beep",
     "explosion",
@@ -19,9 +19,28 @@ function isIgnorableTranscript(transcript) {
     "music",
     "applause",
     "laughter",
+    "thank you",
+    "thanks",
+    "okay",
+    "ok",
+    "bye",
+    "a moment",
+    "one minute",
+  ]);
+
+  if (exactNoisePhrases.has(normalized)) {
+    return true;
+  }
+
+  const embeddedNoisePatterns = [
+    "blank audio",
+    "beep",
+    "explosion",
+    "gunshot",
+    "radio station",
   ];
 
-  return noiseOnlyPatterns.some((pattern) => normalized === pattern || normalized.includes(pattern));
+  return embeddedNoisePatterns.some((pattern) => normalized.includes(pattern));
 }
 
 function getCommandConfidenceFloor(commandType) {
@@ -68,17 +87,35 @@ function getRuntimeVoiceSettings(guildSettings, config) {
       guildSettings.requireWakeWord === undefined
         ? config.REQUIRE_WAKE_WORD
         : guildSettings.requireWakeWord,
-    transcriptionSilenceMs: Math.max(350, transcriptionSilenceMs),
-    commandCooldownMs: Math.max(250, commandCooldownMs),
+    transcriptionSilenceMs: Math.max(300, transcriptionSilenceMs),
+    commandCooldownMs: Math.max(150, commandCooldownMs),
     transcriptionEnabled:
       guildSettings.transcriptionEnabled === undefined ? true : guildSettings.transcriptionEnabled,
+    minCommandAudioMs: Math.max(120, config.MIN_COMMAND_AUDIO_MS),
+    maxQueuedCommandAgeMs: Math.max(1500, config.MAX_QUEUED_COMMAND_AGE_MS),
   };
+}
+
+function getPcmDurationMs(pcmBuffer, sampleRate = 48000, channels = 2, bytesPerSample = 2) {
+  if (!pcmBuffer?.length) {
+    return 0;
+  }
+
+  const bytesPerSecond = sampleRate * channels * bytesPerSample;
+  return Math.round((pcmBuffer.length / bytesPerSecond) * 1000);
+}
+
+function shouldDiscardPcmBuffer(pcmBuffer, runtimeVoiceSettings) {
+  return getPcmDurationMs(pcmBuffer) < runtimeVoiceSettings.minCommandAudioMs;
 }
 
 module.exports = {
   getCommandConfidenceFloor,
+  getPcmDurationMs,
   getRuntimeVoiceSettings,
   getTargetConfidenceFloor,
   isIgnorableTranscript,
+  shouldDiscardPcmBuffer,
   shouldPostTranscripts,
 };
+

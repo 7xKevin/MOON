@@ -58,14 +58,16 @@ const schema = z.object({
   WHISPER_LANGUAGE: z.string().default("en"),
   WHISPER_PROMPT: z
     .string()
-    .default("Discord voice commands like lock, unlock, mute, unmute, kick, drag people here, and move people to named voice channels like general or waiting room. User names may include punctuation or repeated vowels."),
+    .default("Discord voice commands only. Prioritize short admin commands like lock, unlock, mute, unmute, kick, give role, remove role, drag people here, and move people to named voice channels like general or waiting room. Ignore acknowledgements, filler words, and unrelated conversation when possible. User names may include punctuation or repeated vowels."),
   WHISPER_BEAM_SIZE: z.coerce.number().int().positive().default(5),
   WHISPER_BEST_OF: z.coerce.number().int().positive().default(5),
   WHISPER_TEMPERATURE: z.coerce.number().min(0).max(1).default(0),
   TEMP_DIR: z.string().default(path.join(process.cwd(), "tmp")),
-  TRANSCRIPTION_SILENCE_MS: z.coerce.number().int().positive().default(750),
-  COMMAND_COOLDOWN_MS: z.coerce.number().int().nonnegative().default(600),
+  TRANSCRIPTION_SILENCE_MS: z.coerce.number().int().positive().default(650),
+  COMMAND_COOLDOWN_MS: z.coerce.number().int().nonnegative().default(400),
   DEBUG_TRANSCRIPTS: booleanFromEnv.default(false),
+  MIN_COMMAND_AUDIO_MS: z.coerce.number().int().positive().default(320),
+  MAX_QUEUED_COMMAND_AGE_MS: z.coerce.number().int().positive().default(4500),
   DASHBOARD_GUILD_CACHE_MS: z.coerce.number().int().positive().default(120000),
 });
 
@@ -128,6 +130,4 @@ module.exports = {
     isProduction: process.env.NODE_ENV === "production",
   },
 };
-
-
 

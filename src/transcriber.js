@@ -43,31 +43,63 @@ function runProcess(command, args, options = {}) {
   });
 }
 
-async function convertPcmToWav(inputPath, outputPath) {
-  await runProcess(ffmpegPath, [
-    "-f",
-    "s16le",
-    "-ar",
-    "48000",
-    "-ac",
-    "2",
-    "-i",
-    inputPath,
-    "-af",
-    "loudnorm=I=-16:LRA=11:TP=-1.5",
-    "-ar",
-    "16000",
-    "-ac",
-    "1",
-    "-c:a",
-    "pcm_s16le",
-    "-y",
-    outputPath,
-  ]);
+function convertPcmToWavBuffer(pcmBuffer) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(ffmpegPath, [
+      "-f",
+      "s16le",
+      "-ar",
+      "48000",
+      "-ac",
+      "2",
+      "-i",
+      "pipe:0",
+      "-af",
+      "loudnorm=I=-16:LRA=11:TP=-1.5",
+      "-ar",
+      "16000",
+      "-ac",
+      "1",
+      "-c:a",
+      "pcm_s16le",
+      "-f",
+      "wav",
+      "pipe:1",
+    ], {
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    const chunks = [];
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      chunks.push(Buffer.from(chunk));
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve(Buffer.concat(chunks));
+        return;
+      }
+
+      reject(createTranscriptionError("Speech transcription failed.", stderr, ffmpegPath));
+    });
+
+    child.stdin.on("error", () => {
+      // ffmpeg may close stdin early if it aborts; close path is handled above.
+    });
+
+    child.stdin.end(pcmBuffer);
+  });
 }
 
-async function buildAudioFormData(wavPath, model) {
-  const wavBuffer = await fs.readFile(wavPath);
+async function buildAudioFormData(wavBuffer, model) {
   const form = new FormData();
   form.append("file", new Blob([wavBuffer], { type: "audio/wav" }), "command.wav");
   form.append("model", model);
@@ -78,8 +110,8 @@ async function buildAudioFormData(wavPath, model) {
   return form;
 }
 
-async function transcribeViaHttpEndpoint(url, wavPath, options = {}) {
-  const form = await buildAudioFormData(wavPath, options.model);
+async function transcribeViaHttpEndpoint(url, wavBuffer, options = {}) {
+  const form = await buildAudioFormData(wavBuffer, options.model);
   const response = await fetch(url, {
     method: "POST",
     headers: options.headers,
@@ -94,8 +126,8 @@ async function transcribeViaHttpEndpoint(url, wavPath, options = {}) {
   return body.trim();
 }
 
-async function transcribeViaGroq(wavPath) {
-  return transcribeViaHttpEndpoint(config.GROQ_STT_URL, wavPath, {
+async function transcribeViaGroq(wavBuffer) {
+  return transcribeViaHttpEndpoint(config.GROQ_STT_URL, wavBuffer, {
     model: config.GROQ_STT_MODEL,
     headers: {
       Authorization: `Bearer ${config.GROQ_API_KEY}`,
@@ -103,13 +135,16 @@ async function transcribeViaGroq(wavPath) {
   });
 }
 
-async function transcribeViaServer(wavPath) {
-  return transcribeViaHttpEndpoint(config.whisperServerUrl, wavPath, {
+async function transcribeViaServer(wavBuffer) {
+  return transcribeViaHttpEndpoint(config.whisperServerUrl, wavBuffer, {
     model: "whisper-1",
   });
 }
 
-async function runWhisperCpp(wavPath, outputBasePath) {
+async function runWhisperCpp(wavBuffer, outputBasePath) {
+  const wavPath = `${outputBasePath}.wav`;
+  await fs.writeFile(wavPath, wavBuffer);
+
   await runProcess(config.WHISPER_CPP_PATH, [
     "-m",
     config.WHISPER_MODEL_PATH,
@@ -136,10 +171,9 @@ async function runWhisperCpp(wavPath, outputBasePath) {
   return transcript.trim();
 }
 
-async function cleanupTranscriptionFiles(rawPath, wavPath, outputBasePath) {
+async function cleanupTranscriptionFiles(outputBasePath) {
   await Promise.allSettled([
-    fs.unlink(rawPath),
-    fs.unlink(wavPath),
+    fs.unlink(`${outputBasePath}.wav`),
     fs.unlink(`${outputBasePath}.txt`),
     fs.unlink(`${outputBasePath}.json`),
     fs.unlink(`${outputBasePath}.srt`),
@@ -153,17 +187,13 @@ async function transcribePcmBuffer(pcmBuffer) {
   await fs.mkdir(config.TEMP_DIR, { recursive: true });
 
   const jobId = randomUUID();
-  const rawPath = path.join(config.TEMP_DIR, `${jobId}.pcm`);
-  const wavPath = path.join(config.TEMP_DIR, `${jobId}.wav`);
   const outputBasePath = path.join(config.TEMP_DIR, `${jobId}`);
+  const wavBuffer = await convertPcmToWavBuffer(pcmBuffer);
 
   try {
-    await fs.writeFile(rawPath, pcmBuffer);
-    await convertPcmToWav(rawPath, wavPath);
-
     if (config.hasGroqStt) {
       try {
-        return await transcribeViaGroq(wavPath);
+        return await transcribeViaGroq(wavBuffer);
       } catch (error) {
         console.warn("[MOON] Groq transcription failed, falling back.", error?.details ?? error);
       }
@@ -171,14 +201,14 @@ async function transcribePcmBuffer(pcmBuffer) {
 
     if (isWhisperServerReady()) {
       try {
-        return await transcribeViaServer(wavPath);
+        return await transcribeViaServer(wavBuffer);
       } catch (error) {
         console.warn("[MOON] Whisper server request failed, falling back to CLI.", error?.details ?? error);
       }
     }
 
     if (config.hasLocalWhisper) {
-      return await runWhisperCpp(wavPath, outputBasePath);
+      return await runWhisperCpp(wavBuffer, outputBasePath);
     }
 
     throw createTranscriptionError(
@@ -187,10 +217,11 @@ async function transcribePcmBuffer(pcmBuffer) {
       "transcriber"
     );
   } finally {
-    await cleanupTranscriptionFiles(rawPath, wavPath, outputBasePath);
+    await cleanupTranscriptionFiles(outputBasePath);
   }
 }
 
 module.exports = {
   transcribePcmBuffer,
 };
+

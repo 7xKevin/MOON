@@ -21,6 +21,7 @@ const {
   getRuntimeVoiceSettings,
   getTargetConfidenceFloor,
   isIgnorableTranscript,
+  shouldDiscardPcmBuffer,
   shouldPostTranscripts,
 } = require("./voiceCommandRuntime");
 
@@ -663,7 +664,11 @@ function createBot({ config, store }) {
       return;
     }
 
-    const nextJob = session.speechQueue.shift();
+    let nextJob = session.speechQueue.shift();
+    while (nextJob && Date.now() - nextJob.capturedAt > session.runtimeVoiceSettings.maxQueuedCommandAgeMs) {
+      nextJob = session.speechQueue.shift();
+    }
+
     if (!nextJob) {
       return;
     }
@@ -730,7 +735,7 @@ function createBot({ config, store }) {
         session.runtimeVoiceSettings.transcriptionSilenceMs
       );
 
-      if (!pcmBuffer.length) {
+      if (!pcmBuffer.length || shouldDiscardPcmBuffer(pcmBuffer, session.runtimeVoiceSettings)) {
         return;
       }
 
@@ -978,16 +983,4 @@ function createBot({ config, store }) {
 module.exports = {
   createBot,
 };
-
-
-
-
-
-
-
-
-
-
-
-
 
