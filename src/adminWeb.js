@@ -355,11 +355,7 @@ function createAdminApp({ config, store }) {
 
   app.get("/dashboard", requireAuth, requireSuperAdmin, async (req, res, next) => {
     try {
-      const [globalSettings, telemetrySummary, recentTelemetry] = await Promise.all([
-        store.getGlobalAdminSettings(),
-        typeof store.getCommandTelemetrySummary === "function" ? store.getCommandTelemetrySummary(250) : null,
-        typeof store.getCommandTelemetry === "function" ? store.getCommandTelemetry(40) : [],
-      ]);
+      const globalSettings = await store.getGlobalAdminSettings();
       const providerCatalog = buildProviderCatalog(config, globalSettings);
 
       res.render("admin-dashboard", {
@@ -367,8 +363,6 @@ function createAdminApp({ config, store }) {
         saved: req.query.saved === "1",
         settings: globalSettings,
         providerCatalog,
-        telemetrySummary,
-        recentTelemetry,
         systemStatus: {
           hasGroqStt: config.hasGroqStt,
           hasDeepgramStt: config.hasDeepgramStt,
@@ -378,6 +372,23 @@ function createAdminApp({ config, store }) {
           currentDeepgramModel: config.DEEPGRAM_STT_MODEL,
           currentAssemblyAiModel: config.ASSEMBLYAI_STT_MODEL,
         },
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/diagnostics", requireAuth, requireSuperAdmin, async (req, res, next) => {
+    try {
+      const [telemetrySummary, recentTelemetry] = await Promise.all([
+        typeof store.getCommandTelemetrySummary === "function" ? store.getCommandTelemetrySummary(250) : null,
+        typeof store.getCommandTelemetry === "function" ? store.getCommandTelemetry(40) : [],
+      ]);
+
+      res.render("admin-diagnostics", {
+        title: "MOON ADMIN",
+        telemetrySummary,
+        recentTelemetry,
       });
     } catch (error) {
       next(error);

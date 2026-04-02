@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="/static/theme.js" defer></script>
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body class="admin-page admin-minimal">
+    <div class="layout">
+      <aside class="sidebar">
+        <a class="brand" href="/dashboard">
+          <span class="moon-logo brand-logo" aria-hidden="true">
+            <span class="moon-logo-ring"></span>
+            <span class="moon-logo-core"></span>
+            <span class="moon-logo-orbit moon-logo-orbit-one"></span>
+            <span class="moon-logo-orbit moon-logo-orbit-two"></span>
+          </span>
+          <span class="brand-copy">
+            <strong>MOON ADMIN</strong>
+            <span><%= currentUser.globalName || currentUser.username %></span>
+          </span>
+        </a>
+
+        <div class="sidebar-section">
+          <nav class="sidebar-nav">
+            <a class="nav-item" href="/dashboard">Runtime</a>
+            <a class="nav-item active" href="/diagnostics">Diagnostics</a>
+            <% if (userDashboardUrl) { %>
+              <a class="nav-item" href="<%= userDashboardUrl %>" target="_blank" rel="noreferrer">Public dashboard</a>
+            <% } %>
+            <a class="nav-item" href="/logout">Log out</a>
+          </nav>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar admin-topbar">
+          <div>
+            <h1 class="page-title">Diagnostics</h1>
+            <div class="meta">Recent real command outcomes from the live bot.</div>
+          </div>
+          <div class="actions">
+            <button class="theme-toggle" type="button" data-theme-toggle>
+              Theme: <span data-theme-label>Light</span>
+            </button>
+            <a class="button" href="/dashboard">Runtime</a>
+            <a class="button primary" href="/logout">Log out</a>
+          </div>
+        </header>
+
+        <section class="card admin-panel">
+          <div class="card-body form-section">
+            <div class="admin-stats-grid">
+              <div class="admin-stat-tile">
+                <span class="eyebrow">command attempts</span>
+                <strong><%= telemetrySummary?.commandAttempts ?? 0 %></strong>
+              </div>
+              <div class="admin-stat-tile">
+                <span class="eyebrow">success</span>
+                <strong><%= telemetrySummary?.success ?? 0 %></strong>
+              </div>
+              <div class="admin-stat-tile">
+                <span class="eyebrow">failed / blocked</span>
+                <strong><%= telemetrySummary?.failed ?? 0 %></strong>
+              </div>
+              <div class="admin-stat-tile">
+                <span class="eyebrow">ignored noise</span>
+                <strong><%= telemetrySummary?.ignoredNoise ?? 0 %></strong>
+              </div>
+              <div class="admin-stat-tile">
+                <span class="eyebrow">parser misses</span>
+                <strong><%= telemetrySummary?.parserMisses ?? 0 %></strong>
+              </div>
+              <div class="admin-stat-tile">
+                <span class="eyebrow">avg stt</span>
+                <strong><%= telemetrySummary?.averageSttLatencyMs ?? "-" %><% if (telemetrySummary?.averageSttLatencyMs !== null) { %>ms<% } %></strong>
+              </div>
+              <div class="admin-stat-tile">
+                <span class="eyebrow">avg total</span>
+                <strong><%= telemetrySummary?.averageTotalLatencyMs ?? "-" %><% if (telemetrySummary?.averageTotalLatencyMs !== null) { %>ms<% } %></strong>
+              </div>
+            </div>
+
+            <div class="admin-diagnostics-grid">
+              <section class="admin-diagnostic-block">
+                <div class="eyebrow">providers</div>
+                <% const providers = Object.entries(telemetrySummary?.providers ?? {}); %>
+                <% if (!providers.length) { %>
+                  <div class="meta">No runtime command data yet.</div>
+                <% } %>
+                <% providers.forEach(([providerKey, provider]) => { %>
+                  <div class="admin-list-row">
+                    <strong><%= providerKey %></strong>
+                    <span><%= provider.success %>/<%= provider.commandAttempts %> command success</span>
+                    <span><%= provider.ignoredNoise %> noise / <%= provider.parserMisses %> misses</span>
+                    <span><%= provider.avgSttLatencyMs ?? "-" %><% if (provider.avgSttLatencyMs !== null) { %>ms<% } %></span>
+                  </div>
+                <% }) %>
+              </section>
+
+              <section class="admin-diagnostic-block">
+                <div class="eyebrow">failure reasons</div>
+                <% const reasons = Object.entries(telemetrySummary?.reasons ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 8); %>
+                <% if (!reasons.length) { %>
+                  <div class="meta">No failures recorded recently.</div>
+                <% } %>
+                <% reasons.forEach(([reason, count]) => { %>
+                  <div class="admin-list-row">
+                    <strong><%= reason %></strong>
+                    <span><%= count %></span>
+                  </div>
+                <% }) %>
+              </section>
+
+              <section class="admin-diagnostic-block">
+                <div class="eyebrow">command families</div>
+                <% const commands = Object.entries(telemetrySummary?.commands ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 8); %>
+                <% if (!commands.length) { %>
+                  <div class="meta">No command executions yet.</div>
+                <% } %>
+                <% commands.forEach(([commandName, count]) => { %>
+                  <div class="admin-list-row">
+                    <strong><%= commandName %></strong>
+                    <span><%= count %></span>
+                  </div>
+                <% }) %>
+              </section>
+            </div>
+
+            <div class="admin-log-table">
+              <div class="admin-log-head admin-log-row">
+                <span>time</span>
+                <span>speaker</span>
+                <span>status</span>
+                <span>provider</span>
+                <span>command</span>
+                <span>reason</span>
+                <span>stt</span>
+                <span>total</span>
+              </div>
+              <% if (!recentTelemetry?.length) { %>
+                <div class="meta">No command attempts recorded yet.</div>
+              <% } %>
+              <% recentTelemetry.forEach((event) => { %>
+                <div class="admin-log-row">
+                  <span><%= new Date(event.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) %></span>
+                  <span title="<%= event.guildName %>"><%= event.speakerTag %></span>
+                  <span class="badge <%= event.status === 'success' ? 'live' : '' %>"><%= event.status %></span>
+                  <span><%= event.provider || "-" %></span>
+                  <span title="<%= event.transcript %>"><%= event.commandType || "-" %></span>
+                  <span><%= event.reason || "-" %></span>
+                  <span><%= event.sttLatencyMs ?? "-" %><% if (event.sttLatencyMs !== null) { %>ms<% } %></span>
+                  <span><%= event.totalLatencyMs ?? "-" %><% if (event.totalLatencyMs !== null) { %>ms<% } %></span>
+                </div>
+              <% }) %>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

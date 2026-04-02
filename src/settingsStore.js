@@ -204,7 +204,11 @@ function normalizeTelemetryEvent(input = {}) {
 
 function summarizeTelemetry(events) {
   const summary = {
-    total: events.length,
+    totalEvents: events.length,
+    commandAttempts: 0,
+    ignored: 0,
+    ignoredNoise: 0,
+    parserMisses: 0,
     success: 0,
     failed: 0,
     statuses: {},
@@ -223,28 +227,50 @@ function summarizeTelemetry(events) {
   for (const rawEvent of events) {
     const event = normalizeTelemetryEvent(rawEvent);
     summary.statuses[event.status] = (summary.statuses[event.status] ?? 0) + 1;
-    if (event.status === "success") {
+    if (event.status === "ignored") {
+      summary.ignored += 1;
+      if (event.reason === "ignorable-transcript") {
+        summary.ignoredNoise += 1;
+      } else if (event.reason === "parse-failed") {
+        summary.parserMisses += 1;
+      }
+    } else if (event.status === "success") {
+      summary.commandAttempts += 1;
       summary.success += 1;
     } else {
+      summary.commandAttempts += 1;
       summary.failed += 1;
     }
 
-    if (event.reason) {
+    if (event.reason && event.status !== "success") {
       summary.reasons[event.reason] = (summary.reasons[event.reason] ?? 0) + 1;
     }
 
     if (event.provider) {
       summary.providers[event.provider] ??= {
-        total: 0,
+        totalEvents: 0,
+        commandAttempts: 0,
+        ignored: 0,
+        ignoredNoise: 0,
+        parserMisses: 0,
         success: 0,
         failed: 0,
         avgSttLatencyMs: null,
       };
       const provider = summary.providers[event.provider];
-      provider.total += 1;
-      if (event.status === "success") {
+      provider.totalEvents += 1;
+      if (event.status === "ignored") {
+        provider.ignored += 1;
+        if (event.reason === "ignorable-transcript") {
+          provider.ignoredNoise += 1;
+        } else if (event.reason === "parse-failed") {
+          provider.parserMisses += 1;
+        }
+      } else if (event.status === "success") {
+        provider.commandAttempts += 1;
         provider.success += 1;
       } else {
+        provider.commandAttempts += 1;
         provider.failed += 1;
       }
 
