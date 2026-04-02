@@ -514,3 +514,24 @@ code {
     flex-direction: column;
   }
 }
+
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(115, 128, 255, 0.25);
+  background: linear-gradient(180deg, rgba(88, 101, 242, 0.16), rgba(88, 101, 242, 0.08));
+}
+
+.update-banner strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.update-banner span {
+  color: var(--text-muted);
+}

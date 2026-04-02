@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="/static/theme.js" defer></script>
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar">
+        <a class="brand" href="/">
+          <span class="moon-logo brand-logo" aria-hidden="true">
+            <span class="moon-logo-ring"></span>
+            <span class="moon-logo-core"></span>
+            <span class="moon-logo-orbit moon-logo-orbit-one"></span>
+            <span class="moon-logo-orbit moon-logo-orbit-two"></span>
+          </span>
+          <span class="brand-copy">
+            <strong>MOON Control</strong>
+            <span>Desktop app</span>
+          </span>
+        </a>
+
+        <div class="sidebar-section">
+          <p class="sidebar-label">Overview</p>
+          <nav class="sidebar-nav">
+            <a class="nav-item" href="/">Home</a>
+            <% if (currentUser) { %>
+              <a class="nav-item" href="/dashboard">Dashboard</a>
+            <% } %>
+            <a class="nav-item active" href="/downloads/desktop">Desktop Download</a>
+          </nav>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <h1 class="page-title">MOON Desktop</h1>
+            <div class="meta">Install the Windows companion app and keep it linked to your current website and bot.</div>
+          </div>
+          <div class="actions">
+            <button class="theme-toggle" type="button" data-theme-toggle>
+              Theme: <span data-theme-label>Light</span>
+            </button>
+            <% if (currentUser) { %>
+              <a class="button" href="/dashboard">Dashboard</a>
+              <a class="button primary" href="/logout">Log Out</a>
+            <% } else { %>
+              <a class="button primary" href="/login">Log In With Discord</a>
+            <% } %>
+          </div>
+        </header>
+
+        <section class="hero desktop-download-hero">
+          <article class="card">
+            <div class="card-body stack-gap-sm">
+              <div class="badge-row">
+                <span class="eyebrow">Windows companion</span>
+                <span class="badge live">Version <%= desktopRelease.version %></span>
+              </div>
+              <h2 class="section-title section-title-offset">Download the desktop app from the same MOON website.</h2>
+              <p class="section-lead">
+                The companion app is built to stay linked to your current dashboard and Discord bot while moving local capture and future wake-word work onto the user’s machine.
+              </p>
+              <div class="inline-actions">
+                <% if (desktopRelease.windows.available && desktopRelease.windows.downloadUrl) { %>
+                  <a class="button primary" href="<%= desktopRelease.windows.downloadUrl %>">Download for Windows</a>
+                <% } else { %>
+                  <span class="button disabled">Windows build coming soon</span>
+                <% } %>
+                <a class="button" href="/dashboard">Open Dashboard</a>
+              </div>
+              <div class="desktop-release-note">
+                <strong>How updates work</strong>
+                <span>The app checks this website for a newer release manifest and can direct users back here when a newer version is published.</span>
+              </div>
+            </div>
+          </article>
+
+          <aside class="card">
+            <div class="card-body stack-gap-sm">
+              <h3 class="section-title">Release information</h3>
+              <div class="feature-grid desktop-release-grid">
+                <div class="feature-card">
+                  <strong>Current version</strong>
+                  <span><code><%= desktopRelease.version %></code></span>
+                </div>
+                <div class="feature-card">
+                  <strong>Update feed</strong>
+                  <span><code>/api/desktop/release.json</code></span>
+                </div>
+              </div>
+              <div class="field-help">Use this page as the public download point once you upload the Windows installer URL into the MOON configuration.</div>
+            </div>
+          </aside>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

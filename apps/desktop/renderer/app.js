@@ -4,6 +4,9 @@
     const context = await api.getShellContext();
     const triggers = Array.from(document.querySelectorAll('[data-view-trigger]'));
     const views = Array.from(document.querySelectorAll('[data-view]'));
+    const updateBanner = document.querySelector('[data-update-banner]');
+    const updateTitle = document.querySelector('[data-update-title]');
+    const updateCopy = document.querySelector('[data-update-copy]');
 
     function setActiveView(viewName) {
       triggers.forEach((trigger) => {
@@ -12,6 +15,30 @@
       views.forEach((view) => {
         view.classList.toggle('is-active', view.dataset.view === viewName);
       });
+    }
+
+    async function refreshUpdateState() {
+      if (!updateBanner || !updateTitle || !updateCopy) {
+        return;
+      }
+
+      const result = await api.checkForUpdates();
+      updateBanner.hidden = false;
+
+      if (!result.ok) {
+        updateTitle.textContent = 'Update check unavailable';
+        updateCopy.textContent = 'The desktop app could not reach the MOON website release feed right now.';
+        return;
+      }
+
+      if (result.hasUpdate) {
+        updateTitle.textContent = 'New desktop update available';
+        updateCopy.textContent = 'Version ' + result.remoteVersion + ' is ready on the MOON website. Download it from the desktop page.';
+        return;
+      }
+
+      updateTitle.textContent = 'Desktop app is up to date';
+      updateCopy.textContent = 'You are running version ' + result.currentVersion + '. The app will keep checking the website release feed.';
     }
 
     triggers.forEach((trigger) => {
@@ -33,7 +60,7 @@
       }
 
       if (action === 'open-downloads') {
-        api.openExternal(context.webUrl + '/dashboard');
+        api.openExternal(context.webUrl + '/downloads/desktop');
         return;
       }
 
@@ -43,6 +70,8 @@
     });
 
     setActiveView('overview');
+    refreshUpdateState();
+    window.setInterval(refreshUpdateState, 1000 * 60 * 30);
   }
 
   boot().catch((error) => {

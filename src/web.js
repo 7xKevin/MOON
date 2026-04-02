@@ -60,6 +60,18 @@ function buildBotInviteUrl(config, guildId) {
   return `https://discord.com/oauth2/authorize?${params.toString()}`;
 }
 
+function buildDesktopRelease(config) {
+  return {
+    version: config.DESKTOP_APP_VERSION,
+    windows: {
+      available: Boolean(config.DESKTOP_WINDOWS_DOWNLOAD_URL),
+      downloadUrl: config.DESKTOP_WINDOWS_DOWNLOAD_URL ?? null,
+      notesUrl: config.DESKTOP_RELEASE_NOTES_URL ?? `${config.appBaseUrl}/downloads/desktop`,
+      minimumSupportedVersion: config.DESKTOP_APP_VERSION,
+    },
+  };
+}
+
 async function exchangeCodeForToken(config, code) {
   const body = new URLSearchParams({
     client_id: config.DISCORD_CLIENT_ID,
@@ -324,7 +336,20 @@ function createWebApp({ config, store }) {
     res.render("home", {
       title: "MOON Control",
       loggedIn: Boolean(req.session.user),
+      desktopRelease: buildDesktopRelease(config),
     });
+  });
+
+  app.get("/downloads/desktop", (req, res) => {
+    res.render("desktop-download", {
+      title: "MOON Desktop",
+      desktopRelease: buildDesktopRelease(config),
+      loggedIn: Boolean(req.session.user),
+    });
+  });
+
+  app.get("/api/desktop/release.json", (req, res) => {
+    res.status(200).json(buildDesktopRelease(config));
   });
 
   app.get("/login", (req, res) => {

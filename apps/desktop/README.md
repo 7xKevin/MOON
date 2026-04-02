@@ -15,6 +15,7 @@ This first scaffold provides:
 - a lightweight Electron shell
 - a Discord-like desktop layout
 - a dedicated dashboard window that opens the existing MOON website
+- website-driven desktop download and release-feed support
 - a safe starting point for future local wake word and command capture work
 
 ## Structure
@@ -48,3 +49,20 @@ You can point the desktop shell at a different MOON website with:
 $env:MOON_WEB_URL = "https://moon-production-c740.up.railway.app"
 npm start
 ```
+
+
+## Website-driven installs and updates
+
+The desktop app now expects the MOON website to be the public install point.
+
+Website routes:
+- `/downloads/desktop` - public desktop download page
+- `/api/desktop/release.json` - version manifest the app polls for updates
+
+Set these on the MOON website service when you have a Windows installer URL:
+
+`DESKTOP_APP_VERSION` - current desktop release version
+`DESKTOP_WINDOWS_DOWNLOAD_URL` - direct installer download URL
+`DESKTOP_RELEASE_NOTES_URL` - optional release notes page URL
+
+The desktop app checks the release manifest on startup and again every 30 minutes.

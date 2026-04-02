@@ -1175,3 +1175,30 @@ body.modal-open {
     font-size: 0.98rem;
   }
 }
+
+
+.stack-gap-sm {
+  display: grid;
+  gap: 14px;
+}
+
+.desktop-download-hero {
+  align-items: stretch;
+}
+
+.desktop-release-note {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg-subtle);
+}
+
+.desktop-release-note span {
+  color: var(--text-muted);
+}
+
+.desktop-release-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
