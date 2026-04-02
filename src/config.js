@@ -54,6 +54,9 @@ const schema = z.object({
   DEEPGRAM_API_KEY: optionalString,
   DEEPGRAM_STT_MODEL: z.string().default("nova-3"),
   DEEPGRAM_STT_URL: z.string().default("https://api.deepgram.com/v1/listen"),
+  ASSEMBLYAI_API_KEY: optionalString,
+  ASSEMBLYAI_STT_MODEL: z.string().default("universal-3-pro"),
+  ASSEMBLYAI_API_URL: z.string().default("https://api.assemblyai.com"),
   WHISPER_CPP_PATH: optionalString,
   WHISPER_MODEL_PATH: optionalString,
   WHISPER_SERVER_PATH: optionalString,
@@ -97,11 +100,13 @@ if (config.SERVICE_MODE === "bot" || config.SERVICE_MODE === "all") {
   requireSetting("DISCORD_TOKEN", "running the bot");
 
   const hasGroq = Boolean(config.GROQ_API_KEY);
+  const hasDeepgram = Boolean(config.DEEPGRAM_API_KEY);
+  const hasAssemblyAi = Boolean(config.ASSEMBLYAI_API_KEY);
   const hasLocalWhisper = Boolean(config.WHISPER_CPP_PATH && config.WHISPER_MODEL_PATH);
 
-  if (!hasGroq && !hasLocalWhisper) {
+  if (!hasGroq && !hasDeepgram && !hasAssemblyAi && !hasLocalWhisper) {
     throw new Error(
-      "You must configure GROQ_API_KEY or both WHISPER_CPP_PATH and WHISPER_MODEL_PATH when running the bot."
+      "You must configure at least one STT provider: GROQ_API_KEY, DEEPGRAM_API_KEY, ASSEMBLYAI_API_KEY, or local whisper.cpp."
     );
   }
 
@@ -131,6 +136,7 @@ module.exports = {
     whisperServerUrl,
     hasGroqStt: Boolean(config.GROQ_API_KEY),
     hasDeepgramStt: Boolean(config.DEEPGRAM_API_KEY),
+    hasAssemblyAiStt: Boolean(config.ASSEMBLYAI_API_KEY),
     hasLocalWhisper: Boolean(config.WHISPER_CPP_PATH && config.WHISPER_MODEL_PATH),
     isProduction: process.env.NODE_ENV === "production",
   },

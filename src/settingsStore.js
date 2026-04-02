@@ -96,10 +96,12 @@ function createDefaultGuildSettings(guildId, guildName, defaults = {}) {
 function normalizeGlobalAdminSettings(input = {}, defaults = {}) {
   const groqEnabled = normalizeBoolean(input.groqEnabled, defaults.groqEnabled === true);
   const deepgramEnabled = normalizeBoolean(input.deepgramEnabled, defaults.deepgramEnabled === true);
+  const assemblyAiEnabled = normalizeBoolean(input.assemblyAiEnabled, defaults.assemblyAiEnabled === true);
   const localWhisperEnabled = normalizeBoolean(input.localWhisperEnabled, defaults.localWhisperEnabled === true);
   const enabledProviders = [
     groqEnabled ? "groq" : null,
     deepgramEnabled ? "deepgram" : null,
+    assemblyAiEnabled ? "assemblyai" : null,
     localWhisperEnabled ? "local" : null,
   ].filter(Boolean);
   const preferredCandidate =
@@ -115,6 +117,7 @@ function normalizeGlobalAdminSettings(input = {}, defaults = {}) {
     ),
     groqEnabled,
     deepgramEnabled,
+    assemblyAiEnabled,
     localWhisperEnabled,
     preferredSttProvider: enabledProviders.includes(preferredCandidate)
       ? preferredCandidate
@@ -123,6 +126,8 @@ function normalizeGlobalAdminSettings(input = {}, defaults = {}) {
       String(input.groqSttModel ?? defaults.groqSttModel ?? "whisper-large-v3").trim() || "whisper-large-v3",
     deepgramSttModel:
       String(input.deepgramSttModel ?? defaults.deepgramSttModel ?? "nova-3").trim() || "nova-3",
+    assemblyAiSttModel:
+      String(input.assemblyAiSttModel ?? defaults.assemblyAiSttModel ?? "universal-3-pro").trim() || "universal-3-pro",
     defaultWakeWord:
       String(input.defaultWakeWord ?? defaults.defaultWakeWord ?? "moon").trim() || "moon",
     defaultRequireWakeWord: normalizeBoolean(
@@ -214,10 +219,12 @@ class FileSettingsStore {
       userDashboardEnabled: true,
       groqEnabled: config.hasGroqStt,
       deepgramEnabled: config.hasDeepgramStt,
+      assemblyAiEnabled: config.hasAssemblyAiStt,
       localWhisperEnabled: config.hasLocalWhisper,
-      preferredSttProvider: config.hasGroqStt ? "groq" : config.hasDeepgramStt ? "deepgram" : "local",
+      preferredSttProvider: config.hasGroqStt ? "groq" : config.hasDeepgramStt ? "deepgram" : config.hasAssemblyAiStt ? "assemblyai" : "local",
       groqSttModel: config.GROQ_STT_MODEL,
       deepgramSttModel: config.DEEPGRAM_STT_MODEL,
+      assemblyAiSttModel: config.ASSEMBLYAI_STT_MODEL,
       defaultWakeWord: config.WAKE_WORD,
       defaultRequireWakeWord: config.REQUIRE_WAKE_WORD,
       defaultTranscriptionSilenceMs: config.TRANSCRIPTION_SILENCE_MS,
@@ -380,10 +387,12 @@ class PostgresSettingsStore {
       userDashboardEnabled: true,
       groqEnabled: config.hasGroqStt,
       deepgramEnabled: config.hasDeepgramStt,
+      assemblyAiEnabled: config.hasAssemblyAiStt,
       localWhisperEnabled: config.hasLocalWhisper,
-      preferredSttProvider: config.hasGroqStt ? "groq" : config.hasDeepgramStt ? "deepgram" : "local",
+      preferredSttProvider: config.hasGroqStt ? "groq" : config.hasDeepgramStt ? "deepgram" : config.hasAssemblyAiStt ? "assemblyai" : "local",
       groqSttModel: config.GROQ_STT_MODEL,
       deepgramSttModel: config.DEEPGRAM_STT_MODEL,
+      assemblyAiSttModel: config.ASSEMBLYAI_STT_MODEL,
       defaultWakeWord: config.WAKE_WORD,
       defaultRequireWakeWord: config.REQUIRE_WAKE_WORD,
       defaultTranscriptionSilenceMs: config.TRANSCRIPTION_SILENCE_MS,
@@ -472,10 +481,12 @@ class PostgresSettingsStore {
         user_dashboard_enabled BOOLEAN NOT NULL DEFAULT TRUE,
         groq_enabled BOOLEAN NOT NULL DEFAULT TRUE,
         deepgram_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        assemblyai_enabled BOOLEAN NOT NULL DEFAULT FALSE,
         local_whisper_enabled BOOLEAN NOT NULL DEFAULT FALSE,
         preferred_stt_provider TEXT NOT NULL DEFAULT 'groq',
         groq_stt_model TEXT NOT NULL DEFAULT 'whisper-large-v3',
         deepgram_stt_model TEXT NOT NULL DEFAULT 'nova-3',
+        assemblyai_stt_model TEXT NOT NULL DEFAULT 'universal-3-pro',
         default_wake_word TEXT NOT NULL DEFAULT 'moon',
         default_require_wake_word BOOLEAN NOT NULL DEFAULT TRUE,
         default_transcription_silence_ms INTEGER NOT NULL DEFAULT 550,
@@ -488,7 +499,9 @@ class PostgresSettingsStore {
       ALTER TABLE global_admin_settings
       ADD COLUMN IF NOT EXISTS groq_enabled BOOLEAN NOT NULL DEFAULT TRUE,
       ADD COLUMN IF NOT EXISTS deepgram_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-      ADD COLUMN IF NOT EXISTS local_whisper_enabled BOOLEAN NOT NULL DEFAULT FALSE
+      ADD COLUMN IF NOT EXISTS assemblyai_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS local_whisper_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS assemblyai_stt_model TEXT NOT NULL DEFAULT 'universal-3-pro'
     `);
   }
 
@@ -508,10 +521,12 @@ class PostgresSettingsStore {
         userDashboardEnabled: row.user_dashboard_enabled,
         groqEnabled: row.groq_enabled,
         deepgramEnabled: row.deepgram_enabled,
+        assemblyAiEnabled: row.assemblyai_enabled,
         localWhisperEnabled: row.local_whisper_enabled,
         preferredSttProvider: row.preferred_stt_provider,
         groqSttModel: row.groq_stt_model,
         deepgramSttModel: row.deepgram_stt_model,
+        assemblyAiSttModel: row.assemblyai_stt_model,
         defaultWakeWord: row.default_wake_word,
         defaultRequireWakeWord: row.default_require_wake_word,
         defaultTranscriptionSilenceMs: row.default_transcription_silence_ms,
@@ -532,17 +547,19 @@ class PostgresSettingsStore {
           user_dashboard_enabled,
           groq_enabled,
           deepgram_enabled,
+          assemblyai_enabled,
           local_whisper_enabled,
           preferred_stt_provider,
           groq_stt_model,
           deepgram_stt_model,
+          assemblyai_stt_model,
           default_wake_word,
           default_require_wake_word,
           default_transcription_silence_ms,
           default_command_cooldown_ms,
           updated_at
         ) VALUES (
-          'global', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()
+          'global', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()
         )
         ON CONFLICT (settings_key)
         DO UPDATE SET
@@ -550,10 +567,12 @@ class PostgresSettingsStore {
           user_dashboard_enabled = EXCLUDED.user_dashboard_enabled,
           groq_enabled = EXCLUDED.groq_enabled,
           deepgram_enabled = EXCLUDED.deepgram_enabled,
+          assemblyai_enabled = EXCLUDED.assemblyai_enabled,
           local_whisper_enabled = EXCLUDED.local_whisper_enabled,
           preferred_stt_provider = EXCLUDED.preferred_stt_provider,
           groq_stt_model = EXCLUDED.groq_stt_model,
           deepgram_stt_model = EXCLUDED.deepgram_stt_model,
+          assemblyai_stt_model = EXCLUDED.assemblyai_stt_model,
           default_wake_word = EXCLUDED.default_wake_word,
           default_require_wake_word = EXCLUDED.default_require_wake_word,
           default_transcription_silence_ms = EXCLUDED.default_transcription_silence_ms,
@@ -565,10 +584,12 @@ class PostgresSettingsStore {
         normalized.userDashboardEnabled,
         normalized.groqEnabled,
         normalized.deepgramEnabled,
+        normalized.assemblyAiEnabled,
         normalized.localWhisperEnabled,
         normalized.preferredSttProvider,
         normalized.groqSttModel,
         normalized.deepgramSttModel,
+        normalized.assemblyAiSttModel,
         normalized.defaultWakeWord,
         normalized.defaultRequireWakeWord,
         normalized.defaultTranscriptionSilenceMs,

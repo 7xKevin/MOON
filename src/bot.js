@@ -807,9 +807,11 @@ function createBot({ config, store }) {
       preferredSttProvider: globalAdminSettings?.preferredSttProvider,
       groqEnabled: globalAdminSettings?.groqEnabled,
       deepgramEnabled: globalAdminSettings?.deepgramEnabled,
+      assemblyAiEnabled: globalAdminSettings?.assemblyAiEnabled,
       localWhisperEnabled: globalAdminSettings?.localWhisperEnabled,
       groqSttModel: globalAdminSettings?.groqSttModel,
       deepgramSttModel: globalAdminSettings?.deepgramSttModel,
+      assemblyAiSttModel: globalAdminSettings?.assemblyAiSttModel,
     });
     if (!transcript || isIgnorableTranscript(transcript)) {
       return;

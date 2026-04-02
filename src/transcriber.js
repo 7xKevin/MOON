@@ -103,12 +103,14 @@ function resolveTranscriberSettings(overrides = {}) {
   return {
     preferredSttProvider:
       overrides.preferredSttProvider ??
-      (config.hasGroqStt ? "groq" : config.hasDeepgramStt ? "deepgram" : "local"),
+      (config.hasGroqStt ? "groq" : config.hasDeepgramStt ? "deepgram" : config.hasAssemblyAiStt ? "assemblyai" : "local"),
     groqEnabled: overrides.groqEnabled ?? config.hasGroqStt,
     deepgramEnabled: overrides.deepgramEnabled ?? config.hasDeepgramStt,
+    assemblyAiEnabled: overrides.assemblyAiEnabled ?? config.hasAssemblyAiStt,
     localWhisperEnabled: overrides.localWhisperEnabled ?? config.hasLocalWhisper,
     groqSttModel: overrides.groqSttModel ?? config.GROQ_STT_MODEL,
     deepgramSttModel: overrides.deepgramSttModel ?? config.DEEPGRAM_STT_MODEL,
+    assemblyAiSttModel: overrides.assemblyAiSttModel ?? config.ASSEMBLYAI_STT_MODEL,
     whisperLanguage: overrides.whisperLanguage ?? config.WHISPER_LANGUAGE,
     whisperPrompt: overrides.whisperPrompt ?? config.WHISPER_PROMPT,
     whisperTemperature: overrides.whisperTemperature ?? config.WHISPER_TEMPERATURE,
@@ -176,6 +178,77 @@ async function transcribeViaDeepgram(wavBuffer, settings) {
 
   const payload = JSON.parse(body);
   return payload?.results?.channels?.[0]?.alternatives?.[0]?.transcript?.trim?.() ?? "";
+}
+
+async function uploadToAssemblyAi(wavBuffer) {
+  const response = await fetch(`${config.ASSEMBLYAI_API_URL}/v2/upload`, {
+    method: "POST",
+    headers: {
+      Authorization: config.ASSEMBLYAI_API_KEY,
+      "Content-Type": "application/octet-stream",
+    },
+    body: wavBuffer,
+  });
+
+  const body = await response.text();
+  if (!response.ok) {
+    throw createTranscriptionError("Speech transcription failed.", body, `${config.ASSEMBLYAI_API_URL}/v2/upload`);
+  }
+
+  const payload = JSON.parse(body);
+  return payload.upload_url;
+}
+
+async function transcribeViaAssemblyAi(wavBuffer, settings) {
+  const uploadUrl = await uploadToAssemblyAi(wavBuffer);
+  const response = await fetch(`${config.ASSEMBLYAI_API_URL}/v2/transcript`, {
+    method: "POST",
+    headers: {
+      Authorization: config.ASSEMBLYAI_API_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      audio_url: uploadUrl,
+      speech_models: [settings.assemblyAiSttModel],
+      language_detection: settings.whisperLanguage !== "en",
+    }),
+  });
+
+  const body = await response.text();
+  if (!response.ok) {
+    throw createTranscriptionError("Speech transcription failed.", body, `${config.ASSEMBLYAI_API_URL}/v2/transcript`);
+  }
+
+  const { id } = JSON.parse(body);
+  if (!id) {
+    throw createTranscriptionError("Speech transcription failed.", "AssemblyAI did not return a transcript ID.", "assemblyai");
+  }
+
+  const pollingUrl = `${config.ASSEMBLYAI_API_URL}/v2/transcript/${id}`;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const pollResponse = await fetch(pollingUrl, {
+      headers: {
+        Authorization: config.ASSEMBLYAI_API_KEY,
+      },
+    });
+
+    const pollBody = await pollResponse.text();
+    if (!pollResponse.ok) {
+      throw createTranscriptionError("Speech transcription failed.", pollBody, pollingUrl);
+    }
+
+    const payload = JSON.parse(pollBody);
+    if (payload.status === "completed") {
+      return String(payload.text ?? "").trim();
+    }
+
+    if (payload.status === "error") {
+      throw createTranscriptionError("Speech transcription failed.", payload.error ?? pollBody, pollingUrl);
+    }
+  }
+
+  throw createTranscriptionError("Speech transcription failed.", "AssemblyAI transcription timed out.", pollingUrl);
 }
 
 async function transcribeViaServer(wavBuffer, settings) {
@@ -250,6 +323,9 @@ async function transcribePcmBuffer(pcmBuffer, overrides = {}) {
   if (settings.deepgramEnabled && config.hasDeepgramStt) {
     addProvider("deepgram");
   }
+  if (settings.assemblyAiEnabled && config.hasAssemblyAiStt) {
+    addProvider("assemblyai");
+  }
   if (settings.localWhisperEnabled && config.hasLocalWhisper) {
     addProvider("local");
   }
@@ -263,6 +339,10 @@ async function transcribePcmBuffer(pcmBuffer, overrides = {}) {
 
         if (provider === "deepgram") {
           return await transcribeViaDeepgram(wavBuffer, settings);
+        }
+
+        if (provider === "assemblyai") {
+          return await transcribeViaAssemblyAi(wavBuffer, settings);
         }
 
         if (provider === "local") {

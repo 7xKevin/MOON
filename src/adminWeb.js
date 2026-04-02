@@ -9,6 +9,7 @@ const { Pool } = require("pg");
 const DISCORD_API_BASE = "https://discord.com/api/v10";
 const GROQ_MODEL_OPTIONS = ["whisper-large-v3", "whisper-large-v3-turbo"];
 const DEEPGRAM_MODEL_OPTIONS = ["nova-3", "nova-2"];
+const ASSEMBLYAI_MODEL_OPTIONS = ["universal-3-pro"];
 
 function avatarUrl(user) {
   if (!user?.avatar) {
@@ -98,6 +99,19 @@ function buildProviderCatalog(config, settings) {
     });
   }
 
+  if (config.hasAssemblyAiStt) {
+    providers.push({
+      key: "assemblyai",
+      label: "AssemblyAI",
+      description: "Hosted STT provider using Universal-3 async in the current MOON pipeline.",
+      enabled: settings.assemblyAiEnabled,
+      currentModel: settings.assemblyAiSttModel,
+      models: ASSEMBLYAI_MODEL_OPTIONS,
+      toggleName: "assemblyAiEnabled",
+      modelName: "assemblyAiSttModel",
+    });
+  }
+
   if (config.hasLocalWhisper) {
     providers.push({
       key: "local",
@@ -163,12 +177,16 @@ function mapAdminForm(req, existingSettings) {
     deepgramEnabled: hasField("deepgramEnabled")
       ? parseBoolean(req.body.deepgramEnabled)
       : existingSettings.deepgramEnabled,
+    assemblyAiEnabled: hasField("assemblyAiEnabled")
+      ? parseBoolean(req.body.assemblyAiEnabled)
+      : existingSettings.assemblyAiEnabled,
     localWhisperEnabled: hasField("localWhisperEnabled")
       ? parseBoolean(req.body.localWhisperEnabled)
       : existingSettings.localWhisperEnabled,
     preferredSttProvider: req.body.preferredSttProvider,
     groqSttModel: req.body.groqSttModel,
     deepgramSttModel: req.body.deepgramSttModel,
+    assemblyAiSttModel: req.body.assemblyAiSttModel,
     defaultWakeWord: req.body.defaultWakeWord,
     defaultRequireWakeWord: parseBoolean(req.body.defaultRequireWakeWord),
     defaultTranscriptionSilenceMs: req.body.defaultTranscriptionSilenceMs,
@@ -348,9 +366,11 @@ function createAdminApp({ config, store }) {
         systemStatus: {
           hasGroqStt: config.hasGroqStt,
           hasDeepgramStt: config.hasDeepgramStt,
+          hasAssemblyAiStt: config.hasAssemblyAiStt,
           hasLocalWhisper: config.hasLocalWhisper,
           currentGroqModel: config.GROQ_STT_MODEL,
           currentDeepgramModel: config.DEEPGRAM_STT_MODEL,
+          currentAssemblyAiModel: config.ASSEMBLYAI_STT_MODEL,
         },
       });
     } catch (error) {
