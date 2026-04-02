@@ -20,7 +20,7 @@ const GLOBAL_VOICE_COMMANDS = [
   { syntax: 'role remove <user> role <role>', description: 'Remove one role from one user', family: 'role-remove' },
   { syntax: 'say in <text-channel> text <message>', description: 'Send one plain message in a text channel', family: 'say' },
   { syntax: 'mention <user> in <text-channel>', description: 'Mention one user in a text channel', family: 'mention' },
-  { syntax: 'spam <count> in <text-channel> text <message>', description: 'Send a short message up to 5 times in a text channel', family: 'spam' },
+  { syntax: 'spam in <text-channel> text <message>', description: 'Send a short message 5 times in a text channel', family: 'spam' },
   { syntax: 'stop spam', description: 'Stop the active spam job for this server', family: 'spam-stop' },
 ];
 
@@ -566,20 +566,18 @@ function parseTextCommand(tokens, commandText, rawTranscript) {
   const spamMatch = detectAction(tokens, [{ type: 'spam', word: 'spam' }], 0.72);
   if (spamMatch) {
     const remainder = cleanCommandText(tokens.slice(1).join(' '));
-    const match = remainder.match(/^(\d{1,2}) in (.+?) text (.+)$/);
+    const match = remainder.match(/^in (.+?) text (.+)$/);
     if (!match) {
       return null;
     }
 
-    const count = Number.parseInt(match[1], 10);
-    const channelName = cleanCommandText(match[2]);
-    const message = String(match[3] ?? '').trim();
-    if (!Number.isInteger(count) || count <= 0 || !channelName || !message) {
+    const channelName = cleanCommandText(match[1]);
+    const message = String(match[2] ?? '').trim();
+    if (!channelName || !message) {
       return null;
     }
 
     return buildTextCommand('spam', commandText, rawTranscript, spamMatch.score, {
-      count,
       channelName,
       message,
     });

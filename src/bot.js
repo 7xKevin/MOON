@@ -532,7 +532,7 @@ function createBot({ config, store }) {
         return { status: "success", reason: "say" };
       }
 
-      const spamCount = Math.min(Math.max(command.count || 1, 1), 5);
+      const spamCount = 5;
       startSpamJob(guild, channelMatch.channel, safeMessage, spamCount);
       await sendStatus(guild, `Started spam in **${channelMatch.channel.name}** for **${spamCount}** messages.`);
       return { status: "success", reason: "spam-started" };
