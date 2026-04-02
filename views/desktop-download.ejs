@@ -64,11 +64,11 @@
               </div>
               <h2 class="section-title section-title-offset">Download the desktop app from the same MOON website.</h2>
               <p class="section-lead">
-                The companion app is built to stay linked to your current dashboard and Discord bot while moving local capture and future wake-word work onto the user’s machine.
+                The companion app is built to stay linked to your current dashboard and Discord bot while moving local capture and future wake-word work onto the userï¿½s machine.
               </p>
               <div class="inline-actions">
                 <% if (desktopRelease.windows.available && desktopRelease.windows.downloadUrl) { %>
-                  <a class="button primary" href="<%= desktopRelease.windows.downloadUrl %>">Download for Windows</a>
+                  <a class="button primary" href="<%= desktopWindowsDownloadUrl %>">Download for Windows</a>
                 <% } else { %>
                   <span class="button disabled">Windows build coming soon</span>
                 <% } %>
@@ -94,7 +94,7 @@
                   <span><code>/api/desktop/release.json</code></span>
                 </div>
               </div>
-              <div class="field-help">Use this page as the public download point once you upload the Windows installer URL into the MOON configuration.</div>
+              <div class="field-help">Public install link: <code><%= desktopWindowsDownloadUrl %></code>. Your website keeps this same URL while the backend can point it to the latest installer source.</div>
             </div>
           </aside>
         </section>

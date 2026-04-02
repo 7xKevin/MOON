@@ -65,7 +65,7 @@ function buildDesktopRelease(config) {
     version: config.DESKTOP_APP_VERSION,
     windows: {
       available: Boolean(config.DESKTOP_WINDOWS_DOWNLOAD_URL),
-      downloadUrl: config.DESKTOP_WINDOWS_DOWNLOAD_URL ?? null,
+      downloadUrl: config.DESKTOP_WINDOWS_DOWNLOAD_URL ? config.desktopWindowsDownloadUrl : null,
       notesUrl: config.DESKTOP_RELEASE_NOTES_URL ?? `${config.appBaseUrl}/downloads/desktop`,
       minimumSupportedVersion: config.DESKTOP_APP_VERSION,
     },
@@ -345,7 +345,17 @@ function createWebApp({ config, store }) {
       title: "MOON Desktop",
       desktopRelease: buildDesktopRelease(config),
       loggedIn: Boolean(req.session.user),
+      desktopWindowsDownloadUrl: config.desktopWindowsDownloadUrl,
     });
+  });
+
+  app.get(config.desktopWindowsDownloadPath, (req, res) => {
+    if (!config.DESKTOP_WINDOWS_DOWNLOAD_URL) {
+      res.redirect("/downloads/desktop");
+      return;
+    }
+
+    res.redirect(config.DESKTOP_WINDOWS_DOWNLOAD_URL);
   });
 
   app.get("/api/desktop/release.json", (req, res) => {

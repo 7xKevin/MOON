@@ -69,6 +69,10 @@ const schema = z.object({
   MIN_COMMAND_AUDIO_MS: z.coerce.number().int().positive().default(320),
   MAX_QUEUED_COMMAND_AGE_MS: z.coerce.number().int().positive().default(4500),
   DASHBOARD_GUILD_CACHE_MS: z.coerce.number().int().positive().default(120000),
+  DESKTOP_APP_VERSION: z.string().default("0.1.0"),
+  DESKTOP_WINDOWS_DOWNLOAD_URL: optionalString,
+  DESKTOP_RELEASE_NOTES_URL: optionalString,
+  DESKTOP_UPDATE_CHECK_MS: z.coerce.number().int().positive().default(1000 * 60 * 30),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -118,6 +122,7 @@ if (config.SERVICE_MODE === "web" || config.SERVICE_MODE === "all") {
 
 const appBaseUrl = config.APP_BASE_URL ?? `http://localhost:${config.PORT}`;
 const whisperServerUrl = config.WHISPER_SERVER_URL ?? `http://127.0.0.1:${config.WHISPER_SERVER_PORT}/v1/audio/transcriptions`;
+const desktopWindowsDownloadPath = "/downloads/desktop/windows/latest";
 
 module.exports = {
   config: {
@@ -125,6 +130,8 @@ module.exports = {
     appBaseUrl,
     oauthRedirectUri: `${appBaseUrl}/auth/discord/callback`,
     whisperServerUrl,
+    desktopWindowsDownloadPath,
+    desktopWindowsDownloadUrl: new URL(desktopWindowsDownloadPath, appBaseUrl).toString(),
     hasGroqStt: Boolean(config.GROQ_API_KEY),
     hasLocalWhisper: Boolean(config.WHISPER_CPP_PATH && config.WHISPER_MODEL_PATH),
     isProduction: process.env.NODE_ENV === "production",
