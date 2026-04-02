@@ -210,7 +210,12 @@ async function transcribeViaAssemblyAi(wavBuffer, settings) {
     body: JSON.stringify({
       audio_url: uploadUrl,
       speech_models: [settings.assemblyAiSttModel],
-      language_detection: settings.whisperLanguage !== "en",
+      language_detection: settings.whisperLanguage === "auto",
+      ...(settings.whisperLanguage === "auto"
+        ? {}
+        : {
+            language_code: settings.whisperLanguage,
+          }),
     }),
   });
 
