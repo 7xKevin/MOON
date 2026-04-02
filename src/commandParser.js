@@ -548,7 +548,11 @@ function parseTextCommand(tokens, commandText, rawTranscript) {
 
     const targetSpec = parseTargetToken(match[1]);
     const channelName = cleanCommandText(match[2]);
-    if (!targetSpec || targetSpec.kind === 'channel' || !channelName) {
+    if (!targetSpec || !channelName) {
+      return null;
+    }
+
+    if (targetSpec.kind === 'channel' && !bestKeywordMatch(targetSpec.source, ['all', 'everyone', 'everybody'], 0.72)) {
       return null;
     }
 

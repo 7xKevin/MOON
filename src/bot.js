@@ -339,16 +339,39 @@ function createBot({ config, store }) {
     );
   }
 
+  function messageRequestsEveryoneMention(content) {
+    return /@(?:everyone|here)\b/i.test(String(content ?? ""));
+  }
+
+  function canMentionEveryone(channel, botMember) {
+    if (!botMember) {
+      return false;
+    }
+
+    const permissions = channel.permissionsFor(botMember);
+    return Boolean(permissions?.has(PermissionsBitField.Flags.MentionEveryone));
+  }
+
   async function sendPlainText(channel, content) {
+    const allowEveryone = messageRequestsEveryoneMention(content);
     return channel.send({
       content,
       allowedMentions: {
-        parse: [],
+        parse: allowEveryone ? ["everyone"] : [],
       },
     });
   }
 
-  async function sendMentionText(channel, members) {
+  async function sendMentionText(channel, members, options = {}) {
+    if (options.everyone) {
+      return channel.send({
+        content: "@everyone",
+        allowedMentions: {
+          parse: ["everyone"],
+        },
+      });
+    }
+
     const content = members.map((member) => '<@' + member.id + '>').join(' ');
     return channel.send({
       content,
@@ -486,6 +509,11 @@ function createBot({ config, store }) {
         return;
       }
 
+      if (messageRequestsEveryoneMention(safeMessage) && !canMentionEveryone(channelMatch.channel, botMember)) {
+        await sendStatus(guild, `I don't have permission to mention everyone in **${channelMatch.channel.name}**.`);
+        return;
+      }
+
       if (command.type === "say") {
         await sendPlainText(channelMatch.channel, safeMessage);
         await sendStatus(guild, `Sent a message in **${channelMatch.channel.name}**.`);
@@ -519,6 +547,21 @@ function createBot({ config, store }) {
 
       if (!canSendText(channelMatch.channel, botMember)) {
         await sendStatus(guild, `I can't send messages in **${channelMatch.channel.name}**.`);
+        return;
+      }
+
+      const wantsEveryoneMention =
+        command.targetSpec?.kind === "channel" &&
+        ["all", "everyone", "everybody"].includes(String(command.targetSpec.source ?? "").toLowerCase());
+
+      if (wantsEveryoneMention) {
+        if (!canMentionEveryone(channelMatch.channel, botMember)) {
+          await sendStatus(guild, `I don't have permission to mention everyone in **${channelMatch.channel.name}**.`);
+          return;
+        }
+
+        await sendMentionText(channelMatch.channel, [], { everyone: true });
+        await sendStatus(guild, `Mentioned **@everyone** in **${channelMatch.channel.name}**.`);
         return;
       }
 
