@@ -10,4 +10,7 @@ contextBridge.exposeInMainWorld("MOON_DESKTOP", {
   openExternal(url) {
     return ipcRenderer.invoke("moon:open-external", url);
   },
+  checkForUpdates() {
+    return ipcRenderer.invoke("moon:check-for-updates");
+  },
 });

@@ -66,3 +66,24 @@ Set these on the MOON website service when you have a Windows installer URL:
 `DESKTOP_RELEASE_NOTES_URL` - optional release notes page URL
 
 The desktop app checks the release manifest on startup and again every 30 minutes.
+
+
+## Build a Windows installer
+
+From the desktop workspace:
+
+```powershell
+cd apps\desktop
+npm install
+npm run dist:win
+```
+
+Expected output:
+- installer: `apps/desktop/dist/MOON-Setup-0.1.0.exe`
+- unpacked app folder: `apps/desktop/dist/win-unpacked`
+
+After building, upload the generated `.exe` to a public release location and set the website service variable:
+
+```env
+DESKTOP_WINDOWS_DOWNLOAD_URL=https://.../MOON-Setup-0.1.0.exe
+```

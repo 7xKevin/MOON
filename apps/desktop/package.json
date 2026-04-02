@@ -3,13 +3,54 @@
   "version": "0.1.0",
   "private": true,
   "description": "MOON companion app for Windows",
+  "author": "MOON",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
-    "check": "node --check main.js && node --check preload.js && node --check renderer/app.js"
+    "check": "node --check main.js && node --check preload.js && node --check renderer/app.js",
+    "pack:win": "electron-builder --dir --win nsis",
+    "dist:win": "electron-builder --win nsis"
   },
-  "dependencies": {
+  "devDependencies": {
+    "electron-builder": "^26.8.1",
     "electron": "^36.0.0"
+  },
+  "build": {
+    "appId": "com.moon.desktop",
+    "productName": "MOON Desktop",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "main.js"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "MOON-Setup-${version}.${ext}",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "MOON Desktop",
+      "uninstallDisplayName": "MOON Desktop"
+    },
+    "forceCodeSigning": false
   }
 }
