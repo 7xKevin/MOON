@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MOON Desktop</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <div class="moon-logo" aria-hidden="true">
+            <span class="moon-logo-ring"></span>
+            <span class="moon-logo-core"></span>
+            <span class="moon-logo-orbit moon-logo-orbit-one"></span>
+            <span class="moon-logo-orbit moon-logo-orbit-two"></span>
+          </div>
+          <div>
+            <div class="brand-title">MOON Desktop</div>
+            <div class="brand-subtitle">Windows companion</div>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="Desktop sections">
+          <button class="nav-item is-active" data-view-trigger="overview">Overview</button>
+          <button class="nav-item" data-view-trigger="voice">Voice Control</button>
+          <button class="nav-item" data-view-trigger="servers">Servers</button>
+          <button class="nav-item" data-view-trigger="commands">Commands</button>
+          <button class="nav-item" data-view-trigger="website">Website</button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div class="status-pill">
+            <span class="status-dot"></span>
+            Companion scaffold started
+          </div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <header class="topbar">
+          <div>
+            <div class="eyebrow">Companion app foundation</div>
+            <h1 class="page-title">Build the clean desktop layer without touching the live bot.</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="button" data-action="open-dashboard">Open Dashboard</button>
+            <button class="button primary" data-action="open-downloads">App Download Page</button>
+          </div>
+        </header>
+
+        <section class="hero-grid">
+          <article class="hero-card control-card">
+            <div class="hero-card-body">
+              <div class="card-header">
+                <div>
+                  <div class="eyebrow">Design direction</div>
+                  <h2>Discord-like, but lighter.</h2>
+                </div>
+                <span class="badge">Windows first</span>
+              </div>
+              <p class="lead">
+                This desktop app will own local wake-word handling, cleaner command capture, and fast account-linked control,
+                while the current MOON bot and website keep running normally.
+              </p>
+              <div class="stats-row">
+                <div class="stat-card">
+                  <strong>Bot stays stable</strong>
+                  <span>No risky rewrites in the live bot path.</span>
+                </div>
+                <div class="stat-card">
+                  <strong>Website stays active</strong>
+                  <span>Desktop links directly into your existing dashboard.</span>
+                </div>
+                <div class="stat-card">
+                  <strong>Companion gets smarter</strong>
+                  <span>Wake word, push-to-talk, and local UX live here.</span>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <aside class="hero-card preview-card">
+            <div class="preview-window">
+              <div class="preview-topbar">
+                <span></span><span></span><span></span>
+              </div>
+              <div class="preview-layout">
+                <div class="preview-sidebar">
+                  <div class="preview-pill active"></div>
+                  <div class="preview-pill"></div>
+                  <div class="preview-pill"></div>
+                  <div class="preview-pill"></div>
+                </div>
+                <div class="preview-main">
+                  <div class="preview-ring-wrap">
+                    <div class="preview-ring"></div>
+                    <div class="preview-orbit orbit-one"></div>
+                    <div class="preview-orbit orbit-two"></div>
+                  </div>
+                  <div class="preview-command-row">
+                    <span>nova lock vc</span>
+                    <span>nova mute me</span>
+                  </div>
+                  <div class="preview-panel-grid">
+                    <div class="preview-panel"></div>
+                    <div class="preview-panel"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </section>
+
+        <section class="view-stack">
+          <article class="view-card is-active" data-view="overview">
+            <div class="section-heading">
+              <div>
+                <div class="eyebrow">Phase 1</div>
+                <h2>Desktop shell and account linking</h2>
+              </div>
+            </div>
+            <div class="feature-grid">
+              <div class="feature-card">
+                <strong>Secure dashboard window</strong>
+                <span>Open your current MOON website inside a dedicated desktop window instead of disturbing the browser flow.</span>
+              </div>
+              <div class="feature-card">
+                <strong>Lightweight desktop shell</strong>
+                <span>Native-feeling layout with a focused control surface and no changes to live Railway services.</span>
+              </div>
+              <div class="feature-card">
+                <strong>Future local audio layer</strong>
+                <span>This is where wake word, push-to-talk, and command capture will live next.</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="view-card" data-view="voice">
+            <div class="section-heading">
+              <div>
+                <div class="eyebrow">Planned</div>
+                <h2>Voice control roadmap</h2>
+              </div>
+            </div>
+            <ul class="check-list">
+              <li>Local wake word detection before anything reaches the bot.</li>
+              <li>Push-to-talk command capture for low-noise, low-cost control.</li>
+              <li>Faster, cleaner STT path than listening to the whole VC.</li>
+              <li>Per-user device settings and mic calibration.</li>
+            </ul>
+          </article>
+
+          <article class="view-card" data-view="servers">
+            <div class="section-heading">
+              <div>
+                <div class="eyebrow">Linked ecosystem</div>
+                <h2>Bot, website, and companion roles</h2>
+              </div>
+            </div>
+            <div class="flow-grid">
+              <div class="flow-node">
+                <strong>Desktop app</strong>
+                <span>Local command capture, wake word, account device layer.</span>
+              </div>
+              <div class="flow-node">
+                <strong>Website</strong>
+                <span>Download, login, linking, guild settings, release notes.</span>
+              </div>
+              <div class="flow-node">
+                <strong>Discord bot</strong>
+                <span>Executes server actions safely inside Discord.</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="view-card" data-view="commands">
+            <div class="section-heading">
+              <div>
+                <div class="eyebrow">Deterministic mode</div>
+                <h2>Same global command system</h2>
+              </div>
+            </div>
+            <div class="command-grid">
+              <div class="command-card"><code>nova lock vc</code><span>Lock your current voice channel.</span></div>
+              <div class="command-card"><code>nova mute me</code><span>Server-mute yourself.</span></div>
+              <div class="command-card"><code>nova drag me to general</code><span>Move yourself into a named VC.</span></div>
+              <div class="command-card"><code>nova mention freddy in general chat</code><span>Run text-channel actions from voice.</span></div>
+            </div>
+          </article>
+
+          <article class="view-card" data-view="website">
+            <div class="section-heading">
+              <div>
+                <div class="eyebrow">Linked to current services</div>
+                <h2>Use the existing MOON website as the control plane</h2>
+              </div>
+            </div>
+            <div class="website-actions">
+              <button class="button primary" data-action="open-dashboard">Open dashboard window</button>
+              <button class="button" data-action="open-website">Open website in browser</button>
+            </div>
+            <p class="muted-text">
+              The desktop app is intentionally separate so you can keep iterating on it without disturbing the live bot and website.
+            </p>
+          </article>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
