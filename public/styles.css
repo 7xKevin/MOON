@@ -367,50 +367,116 @@ html[data-theme="dark"] button:hover {
   letter-spacing: 0.03em;
 }
 
-.admin-headline {
-  max-width: 18ch;
+.admin-minimal {
+  --radius: 0;
+  --radius-sm: 0;
+  --shadow: none;
 }
 
-.admin-highlight-row {
-  margin-top: 8px;
+.admin-minimal .card,
+.admin-minimal .button,
+.admin-minimal .theme-toggle,
+.admin-minimal button,
+.admin-minimal input[type="text"],
+.admin-minimal textarea,
+.admin-minimal select,
+.admin-minimal .toggle,
+.admin-minimal .save-bar,
+.admin-minimal .notice-overlay,
+.admin-minimal .badge,
+.admin-minimal .eyebrow,
+.admin-minimal .brand {
+  border-radius: 0;
+  box-shadow: none;
 }
 
-.admin-side-card .card-body {
-  justify-content: center;
+.admin-minimal .sidebar {
+  padding-top: 14px;
 }
 
-.admin-summary-card {
-  margin-bottom: 18px;
+.admin-minimal .main {
+  padding-top: 14px;
 }
 
-.admin-status-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+.admin-minimal .page-title {
+  font-size: 1.15rem;
 }
 
-.admin-status-grid-wide {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+.admin-minimal .topbar {
+  margin-bottom: 12px;
 }
 
-.status-card {
-  display: grid;
-  gap: 6px;
+.admin-minimal .card-body {
   padding: 14px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--bg-subtle);
 }
 
-.status-card strong {
-  font-size: 1rem;
+.admin-topbar .meta,
+.admin-copy,
+.admin-intro {
+  max-width: 64ch;
 }
 
-.status-label {
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+.admin-panel {
+  margin-bottom: 14px;
+}
+
+.admin-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.admin-toggle-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.admin-toggle {
+  min-height: 100%;
+}
+
+.admin-provider-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-provider-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.8fr);
+  gap: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.admin-provider-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.admin-provider-main,
+.admin-provider-config {
+  min-width: 0;
+}
+
+.admin-provider-toggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.admin-provider-config .meta {
+  padding: 12px 0;
+}
+
+@media (max-width: 900px) {
+  .admin-provider-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-section-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 .landing-page .layout {

@@ -94,14 +94,31 @@ function createDefaultGuildSettings(guildId, guildName, defaults = {}) {
 }
 
 function normalizeGlobalAdminSettings(input = {}, defaults = {}) {
+  const groqEnabled = normalizeBoolean(input.groqEnabled, defaults.groqEnabled === true);
+  const deepgramEnabled = normalizeBoolean(input.deepgramEnabled, defaults.deepgramEnabled === true);
+  const localWhisperEnabled = normalizeBoolean(input.localWhisperEnabled, defaults.localWhisperEnabled === true);
+  const enabledProviders = [
+    groqEnabled ? "groq" : null,
+    deepgramEnabled ? "deepgram" : null,
+    localWhisperEnabled ? "local" : null,
+  ].filter(Boolean);
+  const preferredCandidate =
+    String(input.preferredSttProvider ?? defaults.preferredSttProvider ?? enabledProviders[0] ?? "groq")
+      .trim()
+      .toLowerCase() || "groq";
+
   return {
     globalBotEnabled: normalizeBoolean(input.globalBotEnabled, defaults.globalBotEnabled !== false),
     userDashboardEnabled: normalizeBoolean(
       input.userDashboardEnabled,
       defaults.userDashboardEnabled !== false
     ),
-    preferredSttProvider:
-      String(input.preferredSttProvider ?? defaults.preferredSttProvider ?? "groq").trim().toLowerCase() || "groq",
+    groqEnabled,
+    deepgramEnabled,
+    localWhisperEnabled,
+    preferredSttProvider: enabledProviders.includes(preferredCandidate)
+      ? preferredCandidate
+      : enabledProviders[0] ?? "groq",
     groqSttModel:
       String(input.groqSttModel ?? defaults.groqSttModel ?? "whisper-large-v3").trim() || "whisper-large-v3",
     deepgramSttModel:
@@ -195,7 +212,10 @@ class FileSettingsStore {
     this.globalDefaults = {
       globalBotEnabled: true,
       userDashboardEnabled: true,
-      preferredSttProvider: config.hasGroqStt ? "groq" : "local",
+      groqEnabled: config.hasGroqStt,
+      deepgramEnabled: config.hasDeepgramStt,
+      localWhisperEnabled: config.hasLocalWhisper,
+      preferredSttProvider: config.hasGroqStt ? "groq" : config.hasDeepgramStt ? "deepgram" : "local",
       groqSttModel: config.GROQ_STT_MODEL,
       deepgramSttModel: config.DEEPGRAM_STT_MODEL,
       defaultWakeWord: config.WAKE_WORD,
@@ -358,7 +378,10 @@ class PostgresSettingsStore {
     this.globalDefaults = {
       globalBotEnabled: true,
       userDashboardEnabled: true,
-      preferredSttProvider: config.hasGroqStt ? "groq" : "local",
+      groqEnabled: config.hasGroqStt,
+      deepgramEnabled: config.hasDeepgramStt,
+      localWhisperEnabled: config.hasLocalWhisper,
+      preferredSttProvider: config.hasGroqStt ? "groq" : config.hasDeepgramStt ? "deepgram" : "local",
       groqSttModel: config.GROQ_STT_MODEL,
       deepgramSttModel: config.DEEPGRAM_STT_MODEL,
       defaultWakeWord: config.WAKE_WORD,
@@ -447,6 +470,9 @@ class PostgresSettingsStore {
         settings_key TEXT PRIMARY KEY,
         global_bot_enabled BOOLEAN NOT NULL DEFAULT TRUE,
         user_dashboard_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        groq_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        deepgram_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        local_whisper_enabled BOOLEAN NOT NULL DEFAULT FALSE,
         preferred_stt_provider TEXT NOT NULL DEFAULT 'groq',
         groq_stt_model TEXT NOT NULL DEFAULT 'whisper-large-v3',
         deepgram_stt_model TEXT NOT NULL DEFAULT 'nova-3',
@@ -456,6 +482,13 @@ class PostgresSettingsStore {
         default_command_cooldown_ms INTEGER NOT NULL DEFAULT 250,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
+    `);
+
+    await this.pool.query(`
+      ALTER TABLE global_admin_settings
+      ADD COLUMN IF NOT EXISTS groq_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS deepgram_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS local_whisper_enabled BOOLEAN NOT NULL DEFAULT FALSE
     `);
   }
 
@@ -473,6 +506,9 @@ class PostgresSettingsStore {
       {
         globalBotEnabled: row.global_bot_enabled,
         userDashboardEnabled: row.user_dashboard_enabled,
+        groqEnabled: row.groq_enabled,
+        deepgramEnabled: row.deepgram_enabled,
+        localWhisperEnabled: row.local_whisper_enabled,
         preferredSttProvider: row.preferred_stt_provider,
         groqSttModel: row.groq_stt_model,
         deepgramSttModel: row.deepgram_stt_model,
@@ -494,6 +530,9 @@ class PostgresSettingsStore {
           settings_key,
           global_bot_enabled,
           user_dashboard_enabled,
+          groq_enabled,
+          deepgram_enabled,
+          local_whisper_enabled,
           preferred_stt_provider,
           groq_stt_model,
           deepgram_stt_model,
@@ -503,12 +542,15 @@ class PostgresSettingsStore {
           default_command_cooldown_ms,
           updated_at
         ) VALUES (
-          'global', $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()
+          'global', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()
         )
         ON CONFLICT (settings_key)
         DO UPDATE SET
           global_bot_enabled = EXCLUDED.global_bot_enabled,
           user_dashboard_enabled = EXCLUDED.user_dashboard_enabled,
+          groq_enabled = EXCLUDED.groq_enabled,
+          deepgram_enabled = EXCLUDED.deepgram_enabled,
+          local_whisper_enabled = EXCLUDED.local_whisper_enabled,
           preferred_stt_provider = EXCLUDED.preferred_stt_provider,
           groq_stt_model = EXCLUDED.groq_stt_model,
           deepgram_stt_model = EXCLUDED.deepgram_stt_model,
@@ -521,6 +563,9 @@ class PostgresSettingsStore {
       [
         normalized.globalBotEnabled,
         normalized.userDashboardEnabled,
+        normalized.groqEnabled,
+        normalized.deepgramEnabled,
+        normalized.localWhisperEnabled,
         normalized.preferredSttProvider,
         normalized.groqSttModel,
         normalized.deepgramSttModel,

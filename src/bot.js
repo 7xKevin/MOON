@@ -805,7 +805,11 @@ function createBot({ config, store }) {
 
     const transcript = await transcribePcmBuffer(pcmBuffer, {
       preferredSttProvider: globalAdminSettings?.preferredSttProvider,
+      groqEnabled: globalAdminSettings?.groqEnabled,
+      deepgramEnabled: globalAdminSettings?.deepgramEnabled,
+      localWhisperEnabled: globalAdminSettings?.localWhisperEnabled,
       groqSttModel: globalAdminSettings?.groqSttModel,
+      deepgramSttModel: globalAdminSettings?.deepgramSttModel,
     });
     if (!transcript || isIgnorableTranscript(transcript)) {
       return;

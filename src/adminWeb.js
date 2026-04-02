@@ -7,6 +7,8 @@ const helmet = require("helmet");
 const { Pool } = require("pg");
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
+const GROQ_MODEL_OPTIONS = ["whisper-large-v3", "whisper-large-v3-turbo"];
+const DEEPGRAM_MODEL_OPTIONS = ["nova-3", "nova-2"];
 
 function avatarUrl(user) {
   if (!user?.avatar) {
@@ -67,6 +69,51 @@ function parseBoolean(value) {
   return value === "on" || value === "true" || value === true;
 }
 
+function buildProviderCatalog(config, settings) {
+  const providers = [];
+
+  if (config.hasGroqStt) {
+    providers.push({
+      key: "groq",
+      label: "Groq",
+      description: "Primary hosted STT provider.",
+      enabled: settings.groqEnabled,
+      currentModel: settings.groqSttModel,
+      models: GROQ_MODEL_OPTIONS,
+      toggleName: "groqEnabled",
+      modelName: "groqSttModel",
+    });
+  }
+
+  if (config.hasDeepgramStt) {
+    providers.push({
+      key: "deepgram",
+      label: "Deepgram",
+      description: "Fallback hosted STT provider.",
+      enabled: settings.deepgramEnabled,
+      currentModel: settings.deepgramSttModel,
+      models: DEEPGRAM_MODEL_OPTIONS,
+      toggleName: "deepgramEnabled",
+      modelName: "deepgramSttModel",
+    });
+  }
+
+  if (config.hasLocalWhisper) {
+    providers.push({
+      key: "local",
+      label: "Local Whisper",
+      description: "Local whisper.cpp fallback on the host.",
+      enabled: settings.localWhisperEnabled,
+      currentModel: config.WHISPER_MODEL_PATH ? path.basename(config.WHISPER_MODEL_PATH) : "configured",
+      models: [],
+      toggleName: "localWhisperEnabled",
+      modelName: null,
+    });
+  }
+
+  return providers;
+}
+
 async function exchangeCodeForToken(config, code) {
   const body = new URLSearchParams({
     client_id: config.DISCORD_CLIENT_ID,
@@ -106,10 +153,19 @@ async function fetchDiscordResource(pathname, accessToken) {
 }
 
 function mapAdminForm(req, existingSettings) {
+  const hasField = (name) => Object.prototype.hasOwnProperty.call(req.body, name);
+
   return {
     ...existingSettings,
     globalBotEnabled: parseBoolean(req.body.globalBotEnabled),
     userDashboardEnabled: parseBoolean(req.body.userDashboardEnabled),
+    groqEnabled: hasField("groqEnabled") ? parseBoolean(req.body.groqEnabled) : existingSettings.groqEnabled,
+    deepgramEnabled: hasField("deepgramEnabled")
+      ? parseBoolean(req.body.deepgramEnabled)
+      : existingSettings.deepgramEnabled,
+    localWhisperEnabled: hasField("localWhisperEnabled")
+      ? parseBoolean(req.body.localWhisperEnabled)
+      : existingSettings.localWhisperEnabled,
     preferredSttProvider: req.body.preferredSttProvider,
     groqSttModel: req.body.groqSttModel,
     deepgramSttModel: req.body.deepgramSttModel,
@@ -282,11 +338,13 @@ function createAdminApp({ config, store }) {
   app.get("/dashboard", requireAuth, requireSuperAdmin, async (req, res, next) => {
     try {
       const globalSettings = await store.getGlobalAdminSettings();
+      const providerCatalog = buildProviderCatalog(config, globalSettings);
 
       res.render("admin-dashboard", {
         title: "MOON ADMIN",
         saved: req.query.saved === "1",
         settings: globalSettings,
+        providerCatalog,
         systemStatus: {
           hasGroqStt: config.hasGroqStt,
           hasDeepgramStt: config.hasDeepgramStt,

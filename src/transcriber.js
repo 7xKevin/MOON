@@ -101,8 +101,14 @@ function convertPcmToWavBuffer(pcmBuffer) {
 
 function resolveTranscriberSettings(overrides = {}) {
   return {
-    preferredSttProvider: overrides.preferredSttProvider ?? (config.hasGroqStt ? "groq" : "local"),
+    preferredSttProvider:
+      overrides.preferredSttProvider ??
+      (config.hasGroqStt ? "groq" : config.hasDeepgramStt ? "deepgram" : "local"),
+    groqEnabled: overrides.groqEnabled ?? config.hasGroqStt,
+    deepgramEnabled: overrides.deepgramEnabled ?? config.hasDeepgramStt,
+    localWhisperEnabled: overrides.localWhisperEnabled ?? config.hasLocalWhisper,
     groqSttModel: overrides.groqSttModel ?? config.GROQ_STT_MODEL,
+    deepgramSttModel: overrides.deepgramSttModel ?? config.DEEPGRAM_STT_MODEL,
     whisperLanguage: overrides.whisperLanguage ?? config.WHISPER_LANGUAGE,
     whisperPrompt: overrides.whisperPrompt ?? config.WHISPER_PROMPT,
     whisperTemperature: overrides.whisperTemperature ?? config.WHISPER_TEMPERATURE,
@@ -145,6 +151,31 @@ async function transcribeViaGroq(wavBuffer, settings) {
       Authorization: `Bearer ${config.GROQ_API_KEY}`,
     },
   });
+}
+
+async function transcribeViaDeepgram(wavBuffer, settings) {
+  const url = new URL(config.DEEPGRAM_STT_URL);
+  url.searchParams.set("model", settings.deepgramSttModel);
+  url.searchParams.set("smart_format", "true");
+  url.searchParams.set("punctuate", "true");
+  url.searchParams.set("language", settings.whisperLanguage);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Token ${config.DEEPGRAM_API_KEY}`,
+      "Content-Type": "audio/wav",
+    },
+    body: wavBuffer,
+  });
+
+  const body = await response.text();
+  if (!response.ok) {
+    throw createTranscriptionError("Speech transcription failed.", body, url.toString());
+  }
+
+  const payload = JSON.parse(body);
+  return payload?.results?.channels?.[0]?.alternatives?.[0]?.transcript?.trim?.() ?? "";
 }
 
 async function transcribeViaServer(wavBuffer, settings) {
@@ -202,35 +233,57 @@ async function transcribePcmBuffer(pcmBuffer, overrides = {}) {
   const outputBasePath = path.join(config.TEMP_DIR, `${jobId}`);
   const wavBuffer = await convertPcmToWavBuffer(pcmBuffer);
   const settings = resolveTranscriberSettings(overrides);
+  const providerOrder = [];
+
+  const addProvider = (provider) => {
+    if (!providerOrder.includes(provider)) {
+      providerOrder.push(provider);
+    }
+  };
+
+  if (settings.preferredSttProvider) {
+    addProvider(settings.preferredSttProvider);
+  }
+  if (settings.groqEnabled && config.hasGroqStt) {
+    addProvider("groq");
+  }
+  if (settings.deepgramEnabled && config.hasDeepgramStt) {
+    addProvider("deepgram");
+  }
+  if (settings.localWhisperEnabled && config.hasLocalWhisper) {
+    addProvider("local");
+  }
 
   try {
-    if (settings.preferredSttProvider === "groq" && config.hasGroqStt) {
+    for (const provider of providerOrder) {
       try {
-        return await transcribeViaGroq(wavBuffer, settings);
+        if (provider === "groq") {
+          return await transcribeViaGroq(wavBuffer, settings);
+        }
+
+        if (provider === "deepgram") {
+          return await transcribeViaDeepgram(wavBuffer, settings);
+        }
+
+        if (provider === "local") {
+          if (isWhisperServerReady()) {
+            try {
+              return await transcribeViaServer(wavBuffer, settings);
+            } catch (error) {
+              console.warn("[MOON] Whisper server request failed, falling back to CLI.", error?.details ?? error);
+            }
+          }
+
+          return await runWhisperCpp(wavBuffer, outputBasePath, settings);
+        }
       } catch (error) {
-        console.warn("[MOON] Groq transcription failed, falling back.", error?.details ?? error);
+        console.warn(`[MOON] ${provider} transcription failed, falling back.`, error?.details ?? error);
       }
-    }
-
-    if (isWhisperServerReady()) {
-      try {
-        return await transcribeViaServer(wavBuffer, settings);
-      } catch (error) {
-        console.warn("[MOON] Whisper server request failed, falling back to CLI.", error?.details ?? error);
-      }
-    }
-
-    if (config.hasLocalWhisper) {
-      return await runWhisperCpp(wavBuffer, outputBasePath, settings);
-    }
-
-    if (config.hasGroqStt) {
-      return await transcribeViaGroq(wavBuffer, settings);
     }
 
     throw createTranscriptionError(
       "Speech transcription failed.",
-      "No speech provider is available. Configure GROQ_API_KEY or local whisper.cpp.",
+      "No speech provider is available. Configure a provider in MOON ADMIN or environment variables.",
       "transcriber"
     );
   } finally {
