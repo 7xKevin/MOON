@@ -608,9 +608,37 @@ html[data-theme="dark"] button:hover {
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
+.guild-grid-spacious {
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+  gap: 18px;
+  align-items: stretch;
+}
+
 .guild-card {
   display: grid;
   gap: 12px;
+  min-height: 100%;
+}
+
+.guild-grid-spacious .card-body {
+  padding: 22px;
+}
+
+.guild-grid-spacious .guild-card {
+  border-radius: 14px;
+}
+
+.guild-grid-spacious .guild-name {
+  margin: 2px 0 6px;
+  font-size: 1.08rem;
+}
+
+.guild-grid-spacious .meta {
+  line-height: 1.5;
+}
+
+.guild-grid-spacious .guild-card-actions {
+  margin-top: 10px;
 }
 
 .guild-name {
@@ -880,12 +908,40 @@ button.success:hover {
 
 .notice.is-hidden {
   opacity: 0;
-  transform: translateY(-6px);
+  transform: translate(-50%, -18px);
   pointer-events: none;
+}
+
+.notice:not(.notice-overlay).is-hidden {
+  transform: translateY(-6px);
 }
 
 .notice {
   transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.notice.success {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.notice-overlay {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translate(-50%, -10px);
+  min-width: 260px;
+  max-width: min(440px, calc(100vw - 28px));
+  margin: 0;
+  padding: 13px 18px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--success-accent) 34%, var(--line));
+  background: color-mix(in srgb, var(--success-accent) 15%, var(--bg-elevated));
+  color: var(--success-accent);
+  text-align: center;
+  font-weight: 700;
+  box-shadow: var(--shadow);
+  z-index: 61;
 }
 
 @media (max-width: 640px) {
@@ -893,6 +949,11 @@ button.success:hover {
     flex-direction: column;
     align-items: stretch;
     bottom: 14px;
+  }
+
+  .notice-overlay {
+    top: 12px;
+    max-width: calc(100vw - 20px);
   }
 }
 
@@ -935,8 +996,10 @@ body.page-leaving .layout {
 .toast-stack {
   position: fixed;
   top: 18px;
-  right: 18px;
+  left: 50%;
+  transform: translateX(-50%);
   display: grid;
+  justify-items: center;
   gap: 10px;
   z-index: 60;
 }
@@ -961,7 +1024,9 @@ body.page-leaving .layout {
 }
 
 .toast.success {
-  border-color: color-mix(in srgb, var(--success-accent) 32%, var(--line));
+  border-color: color-mix(in srgb, var(--success-accent) 40%, var(--line));
+  background: color-mix(in srgb, var(--success-accent) 15%, var(--bg-elevated));
+  color: var(--success-accent);
 }
 
 .toast.error {
