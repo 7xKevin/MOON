@@ -42,7 +42,7 @@
             <h1 class="page-title">Servers</h1>
             <div class="meta">
               Showing <%= guilds.length %> server<%= guilds.length === 1 ? "" : "s" %> where your Discord
-              account has admin access.
+              account has control access.
             </div>
           </div>
           <div class="actions">
@@ -71,8 +71,10 @@
             <div class="card-body">
               <h2 class="section-title">No accessible servers</h2>
               <p class="section-lead">
-                Discord did not return any guilds where your account has <code>Manage Server</code> or
-                <code>Administrator</code>. If that seems wrong, log out and log in again after checking your roles.
+                Discord did not return any guilds where your account has one of the supported control permissions:
+                <code>Administrator</code>, <code>Manage Server</code>, <code>Manage Channels</code>,
+                <code>Manage Roles</code>, <code>Move Members</code>, or <code>Mute Members</code>.
+                If that seems wrong, log out and log in again after checking your roles.
               </p>
             </div>
           </section>

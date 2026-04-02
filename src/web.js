@@ -10,9 +10,13 @@ const { getGlobalVoiceCommandCatalog } = require("./commandParser");
 const { createDefaultGuildSettings, normalizeGuildSettings, parseStringList } = require("./settingsStore");
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
-const ADMIN_MASK =
+const DASHBOARD_ACCESS_MASK =
   PermissionsBitField.Flags.Administrator |
-  PermissionsBitField.Flags.ManageGuild;
+  PermissionsBitField.Flags.ManageGuild |
+  PermissionsBitField.Flags.ManageChannels |
+  PermissionsBitField.Flags.ManageRoles |
+  PermissionsBitField.Flags.MoveMembers |
+  PermissionsBitField.Flags.MuteMembers;
 
 function avatarUrl(user) {
   if (!user?.avatar) {
@@ -32,7 +36,7 @@ function hasGuildAccess(guild, config, sessionUser) {
   }
 
   const permissions = BigInt(guild.permissions ?? "0");
-  return (permissions & ADMIN_MASK) !== 0n;
+  return (permissions & DASHBOARD_ACCESS_MASK) !== 0n;
 }
 
 function buildBotInviteUrl(config, guildId) {
