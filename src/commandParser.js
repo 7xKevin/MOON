@@ -179,8 +179,23 @@ function cleanCommandText(input) {
   return stripPhrases(stripPhrases(normalizeText(input), leadingPhrases, true), trailingPhrases, false);
 }
 
-function stripWakeWordPrefix(normalized, wakeWord, requireWakeWord) {
+function buildWakeWordCandidates(wakeWord) {
   const normalizedWakeWord = normalizeText(wakeWord);
+  const compactWakeWord = compactText(normalizedWakeWord);
+  const candidates = new Set([normalizedWakeWord, compactWakeWord]);
+
+  if (compactWakeWord === 'nova') {
+    ['no more', 'noma', 'nora', 'never', 'no va'].forEach((variant) => candidates.add(variant));
+  }
+
+  if (compactWakeWord === 'moon') {
+    ['mune', 'mon', 'moone'].forEach((variant) => candidates.add(variant));
+  }
+
+  return Array.from(candidates).filter(Boolean);
+}
+
+function stripWakeWordPrefix(normalized, wakeWord, requireWakeWord) {
   const tokens = normalized.split(' ').filter(Boolean);
 
   if (!tokens.length) {
@@ -192,10 +207,31 @@ function stripWakeWordPrefix(normalized, wakeWord, requireWakeWord) {
     wakeIndex = 1;
   }
 
-  const candidate = tokens[wakeIndex];
-  const wakeMatch = normalizedWakeWord ? bestKeywordMatch(candidate, [normalizedWakeWord], 0.55) : null;
-  if (wakeMatch) {
-    return cleanCommandText(tokens.slice(wakeIndex + 1).join(' '));
+  const wakeCandidates = buildWakeWordCandidates(wakeWord);
+  const phraseCandidates = [
+    { text: tokens.slice(wakeIndex, wakeIndex + 2).join(' '), consumed: 2 },
+    { text: tokens[wakeIndex], consumed: 1 },
+  ].filter((entry) => entry.text);
+
+  for (const phrase of phraseCandidates) {
+    if (phrase.consumed > 1) {
+      const normalizedPhrase = normalizeText(phrase.text);
+      const compactPhrase = compactText(phrase.text);
+      const exactWakeAlias = wakeCandidates.some((candidate) => {
+        return normalizeText(candidate) === normalizedPhrase || compactText(candidate) === compactPhrase;
+      });
+
+      if (exactWakeAlias) {
+        return cleanCommandText(tokens.slice(wakeIndex + phrase.consumed).join(' '));
+      }
+
+      continue;
+    }
+
+    const wakeMatch = wakeCandidates.length ? bestKeywordMatch(phrase.text, wakeCandidates, 0.55) : null;
+    if (wakeMatch) {
+      return cleanCommandText(tokens.slice(wakeIndex + phrase.consumed).join(' '));
+    }
   }
 
   return requireWakeWord ? null : cleanCommandText(normalized);
