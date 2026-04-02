@@ -4,6 +4,7 @@ const express = require("express");
 const session = require("express-session");
 const pgSession = require("connect-pg-simple");
 const helmet = require("helmet");
+const { Pool } = require("pg");
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
 
@@ -127,6 +128,33 @@ function formatAdminError(error) {
   return "Something went wrong in MOON ADMIN. Please try again.";
 }
 
+async function ensureSessionTable(config, tableName) {
+  if (!config.DATABASE_URL) {
+    return;
+  }
+
+  const pool = new Pool({
+    connectionString: config.DATABASE_URL,
+    ssl: config.isProduction ? { rejectUnauthorized: false } : false,
+  });
+
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ${tableName} (
+        sid VARCHAR NOT NULL PRIMARY KEY,
+        sess JSON NOT NULL,
+        expire TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS ${tableName}_expire_idx
+      ON ${tableName} (expire)
+    `);
+  } finally {
+    await pool.end().catch(() => {});
+  }
+}
+
 function createAdminApp({ config, store }) {
   const app = express();
   app.locals.config = config;
@@ -138,7 +166,7 @@ function createAdminApp({ config, store }) {
           connectionString: config.DATABASE_URL,
           ssl: config.isProduction ? { rejectUnauthorized: false } : false,
         },
-        createTableIfMissing: true,
+        createTableIfMissing: false,
         tableName: "admin_sessions",
       })
     : undefined;
@@ -291,6 +319,11 @@ function createAdminApp({ config, store }) {
   app.use((error, req, res, next) => {
     console.error("[MOON ADMIN] Dashboard error", error);
 
+    if (res.headersSent) {
+      next(error);
+      return;
+    }
+
     if (req.get("x-requested-with") === "fetch" || req.accepts("json") === "json") {
       res.status(500).json({ ok: false, error: formatAdminError(error) });
       return;
@@ -305,6 +338,8 @@ function createAdminApp({ config, store }) {
 
   return {
     async start() {
+      await ensureSessionTable(config, "admin_sessions");
+
       return new Promise((resolve) => {
         const server = app.listen(config.PORT, config.HOST, () => {
           console.log(`[MOON ADMIN] Dashboard listening on ${config.HOST}:${config.PORT}`);

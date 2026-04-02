@@ -4,6 +4,7 @@ const express = require("express");
 const session = require("express-session");
 const pgSession = require("connect-pg-simple");
 const helmet = require("helmet");
+const { Pool } = require("pg");
 const { PermissionsBitField } = require("discord.js");
 const { getGlobalVoiceCommandCatalog } = require("./commandParser");
 const { createDefaultGuildSettings, normalizeGuildSettings, parseStringList } = require("./settingsStore");
@@ -209,6 +210,33 @@ function formatDashboardError(error) {
   return "Something went wrong. Please try again.";
 }
 
+async function ensureSessionTable(config, tableName) {
+  if (!config.DATABASE_URL) {
+    return;
+  }
+
+  const pool = new Pool({
+    connectionString: config.DATABASE_URL,
+    ssl: config.isProduction ? { rejectUnauthorized: false } : false,
+  });
+
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ${tableName} (
+        sid VARCHAR NOT NULL PRIMARY KEY,
+        sess JSON NOT NULL,
+        expire TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS ${tableName}_expire_idx
+      ON ${tableName} (expire)
+    `);
+  } finally {
+    await pool.end().catch(() => {});
+  }
+}
+
 async function getDiscordAccessToken(req, config) {
   const oauth = req.session.oauth;
   if (!oauth?.accessToken) {
@@ -279,7 +307,7 @@ function createWebApp({ config, store }) {
           connectionString: config.DATABASE_URL,
           ssl: config.isProduction ? { rejectUnauthorized: false } : false,
         },
-        createTableIfMissing: true,
+        createTableIfMissing: false,
         tableName: "web_sessions",
       })
     : undefined;
@@ -487,6 +515,11 @@ function createWebApp({ config, store }) {
   app.use((error, req, res, next) => {
     console.error("[MOON] Dashboard error", error);
 
+    if (res.headersSent) {
+      next(error);
+      return;
+    }
+
     if (req.get("x-requested-with") === "fetch" || req.accepts("json") === "json") {
       res.status(500).json({ ok: false, error: formatDashboardError(error) });
       return;
@@ -501,6 +534,8 @@ function createWebApp({ config, store }) {
 
   return {
     async start() {
+      await ensureSessionTable(config, "web_sessions");
+
       return new Promise((resolve) => {
         const server = app.listen(config.PORT, config.HOST, () => {
           console.log(`[MOON] Dashboard listening on ${config.HOST}:${config.PORT}`);
