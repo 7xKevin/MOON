@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld("MOON_DESKTOP", {
   openDashboard(targetPath) {
     return ipcRenderer.invoke("moon:open-dashboard", targetPath);
   },
+  navigateMain(targetPath) {
+    return ipcRenderer.invoke("moon:navigate-main", targetPath);
+  },
   openExternal(url) {
     return ipcRenderer.invoke("moon:open-external", url);
   },

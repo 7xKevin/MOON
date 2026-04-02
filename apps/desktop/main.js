@@ -4,7 +4,6 @@ const { app, BrowserWindow, ipcMain, shell, nativeTheme } = require("electron");
 const DEFAULT_WEB_URL = process.env.MOON_WEB_URL || "https://moon-production-c740.up.railway.app";
 const DEFAULT_UPDATE_FEED_URL = process.env.MOON_DESKTOP_UPDATE_FEED_URL || new URL('/api/desktop/release.json', DEFAULT_WEB_URL).toString();
 let mainWindow = null;
-let dashboardWindow = null;
 
 function getPreloadPath() {
   return path.join(__dirname, "preload.js");
@@ -60,37 +59,14 @@ function createMainWindow() {
   });
 }
 
-function createDashboardWindow(targetPath = "/dashboard") {
-  if (dashboardWindow && !dashboardWindow.isDestroyed()) {
-    dashboardWindow.focus();
-    return dashboardWindow;
+function navigateMainWindow(targetPath = '/dashboard') {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createMainWindow();
   }
 
-  dashboardWindow = new BrowserWindow({
-    width: 1280,
-    height: 860,
-    minWidth: 980,
-    minHeight: 680,
-    backgroundColor: "#111318",
-    title: "MOON Dashboard",
-    autoHideMenuBar: true,
-    show: false,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
-  });
-
-  dashboardWindow.loadURL(new URL(targetPath, DEFAULT_WEB_URL).toString());
-  dashboardWindow.once("ready-to-show", () => {
-    dashboardWindow?.show();
-  });
-  dashboardWindow.on("closed", () => {
-    dashboardWindow = null;
-  });
-
-  return dashboardWindow;
+  mainWindow.loadURL(new URL(targetPath, DEFAULT_WEB_URL).toString());
+  mainWindow.focus();
+  return true;
 }
 
 app.whenReady().then(() => {
@@ -119,8 +95,11 @@ ipcMain.handle("moon:get-shell-context", () => ({
 }));
 
 ipcMain.handle("moon:open-dashboard", (_event, targetPath) => {
-  createDashboardWindow(targetPath || "/dashboard");
-  return true;
+  return navigateMainWindow(targetPath || '/dashboard');
+});
+
+ipcMain.handle("moon:navigate-main", (_event, targetPath) => {
+  return navigateMainWindow(targetPath || '/');
 });
 
 ipcMain.handle("moon:open-external", (_event, url) => {

@@ -33,7 +33,7 @@
 
       if (result.hasUpdate) {
         updateTitle.textContent = 'New desktop update available';
-        updateCopy.textContent = 'Version ' + result.remoteVersion + ' is ready on the MOON website. Download it from the desktop page.';
+        updateCopy.textContent = 'Version ' + result.remoteVersion + ' is available. Open the MOON website in this window to update.';
         return;
       }
 
@@ -59,13 +59,8 @@
         return;
       }
 
-      if (action === 'open-downloads') {
-        api.openExternal(context.webUrl + '/downloads/desktop');
-        return;
-      }
-
       if (action === 'open-website') {
-        api.openExternal(context.webUrl);
+        api.navigateMain('/');
       }
     });
 

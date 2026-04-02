@@ -68,7 +68,7 @@
               </p>
               <div class="inline-actions">
                 <% if (desktopRelease.windows.available && desktopRelease.windows.downloadUrl) { %>
-                  <a class="button primary" href="<%= desktopWindowsDownloadUrl %>">Download for Windows</a>
+                  <a class="button primary" href="<%= desktopWindowsDownloadUrl %>" data-no-spa="true">Download for Windows</a>
                 <% } else { %>
                   <span class="button disabled">Windows build coming soon</span>
                 <% } %>

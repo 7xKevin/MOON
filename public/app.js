@@ -133,7 +133,7 @@
   }
 
   function shouldHandleLink(link) {
-    if (!link || link.target || link.hasAttribute('download')) {
+    if (!link || link.target || link.hasAttribute('download') || link.dataset.noSpa === 'true') {
       return false;
     }
 
@@ -148,7 +148,7 @@
         return false;
       }
 
-      if (url.pathname === '/login' || url.pathname === '/logout' || url.pathname.startsWith('/auth/')) {
+      if (url.pathname === '/login' || url.pathname === '/logout' || url.pathname.startsWith('/auth/') || url.pathname.startsWith('/downloads/desktop/windows/')) {
         return false;
       }
 
