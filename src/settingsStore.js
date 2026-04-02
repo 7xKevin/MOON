@@ -157,6 +157,7 @@ function normalizeSettingsFileShape(raw) {
       userGuildSettings: raw.userGuildSettings,
       globalAdminSettings: raw.globalAdminSettings ?? {},
       legacyGuildSettings: raw.legacyGuildSettings ?? {},
+      commandTelemetry: Array.isArray(raw.commandTelemetry) ? raw.commandTelemetry : [],
     };
   }
 
@@ -177,7 +178,109 @@ function normalizeSettingsFileShape(raw) {
     userGuildSettings: {},
     globalAdminSettings: {},
     legacyGuildSettings,
+    commandTelemetry: [],
   };
+}
+
+function normalizeTelemetryEvent(input = {}) {
+  return {
+    id: String(input.id ?? "").trim() || `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    guildId: String(input.guildId ?? "").trim(),
+    guildName: String(input.guildName ?? "Unknown Server").trim() || "Unknown Server",
+    speakerId: input.speakerId ? String(input.speakerId).trim() : "",
+    speakerTag: String(input.speakerTag ?? "unknown").trim() || "unknown",
+    wakeWord: String(input.wakeWord ?? "").trim(),
+    transcript: String(input.transcript ?? "").trim(),
+    status: String(input.status ?? "unknown").trim() || "unknown",
+    reason: input.reason ? String(input.reason).trim() : "",
+    commandType: input.commandType ? String(input.commandType).trim() : "",
+    provider: input.provider ? String(input.provider).trim() : "",
+    model: input.model ? String(input.model).trim() : "",
+    sttLatencyMs: Number.isFinite(Number(input.sttLatencyMs)) ? Math.round(Number(input.sttLatencyMs)) : null,
+    totalLatencyMs: Number.isFinite(Number(input.totalLatencyMs)) ? Math.round(Number(input.totalLatencyMs)) : null,
+    createdAt: input.createdAt ? new Date(input.createdAt).toISOString() : new Date().toISOString(),
+  };
+}
+
+function summarizeTelemetry(events) {
+  const summary = {
+    total: events.length,
+    success: 0,
+    failed: 0,
+    statuses: {},
+    reasons: {},
+    providers: {},
+    commands: {},
+    averageSttLatencyMs: null,
+    averageTotalLatencyMs: null,
+  };
+
+  let sttLatencyTotal = 0;
+  let sttLatencyCount = 0;
+  let totalLatencyTotal = 0;
+  let totalLatencyCount = 0;
+
+  for (const rawEvent of events) {
+    const event = normalizeTelemetryEvent(rawEvent);
+    summary.statuses[event.status] = (summary.statuses[event.status] ?? 0) + 1;
+    if (event.status === "success") {
+      summary.success += 1;
+    } else {
+      summary.failed += 1;
+    }
+
+    if (event.reason) {
+      summary.reasons[event.reason] = (summary.reasons[event.reason] ?? 0) + 1;
+    }
+
+    if (event.provider) {
+      summary.providers[event.provider] ??= {
+        total: 0,
+        success: 0,
+        failed: 0,
+        avgSttLatencyMs: null,
+      };
+      const provider = summary.providers[event.provider];
+      provider.total += 1;
+      if (event.status === "success") {
+        provider.success += 1;
+      } else {
+        provider.failed += 1;
+      }
+
+      if (event.sttLatencyMs !== null) {
+        provider._sttLatencyTotal = (provider._sttLatencyTotal ?? 0) + event.sttLatencyMs;
+        provider._sttLatencyCount = (provider._sttLatencyCount ?? 0) + 1;
+      }
+    }
+
+    if (event.commandType) {
+      summary.commands[event.commandType] = (summary.commands[event.commandType] ?? 0) + 1;
+    }
+
+    if (event.sttLatencyMs !== null) {
+      sttLatencyTotal += event.sttLatencyMs;
+      sttLatencyCount += 1;
+    }
+
+    if (event.totalLatencyMs !== null) {
+      totalLatencyTotal += event.totalLatencyMs;
+      totalLatencyCount += 1;
+    }
+  }
+
+  summary.averageSttLatencyMs = sttLatencyCount ? Math.round(sttLatencyTotal / sttLatencyCount) : null;
+  summary.averageTotalLatencyMs = totalLatencyCount ? Math.round(totalLatencyTotal / totalLatencyCount) : null;
+
+  for (const provider of Object.values(summary.providers)) {
+    provider.avgSttLatencyMs = provider._sttLatencyCount
+      ? Math.round(provider._sttLatencyTotal / provider._sttLatencyCount)
+      : null;
+    delete provider._sttLatencyTotal;
+    delete provider._sttLatencyCount;
+  }
+
+  return summary;
 }
 
 function stripSharedGuildState(settings) {
@@ -246,6 +349,7 @@ class FileSettingsStore {
             userGuildSettings: {},
             globalAdminSettings: createDefaultGlobalAdminSettings(this.globalDefaults),
             legacyGuildSettings: {},
+            commandTelemetry: [],
           },
           null,
           2
@@ -367,6 +471,24 @@ class FileSettingsStore {
 
     await this.writeAll(all);
     return all.sharedGuilds[guildId];
+  }
+
+  async recordCommandTelemetry(event) {
+    const all = await this.readAll();
+    const normalized = normalizeTelemetryEvent(event);
+    all.commandTelemetry = [normalized, ...(all.commandTelemetry ?? [])].slice(0, 400);
+    await this.writeAll(all);
+    return normalized;
+  }
+
+  async getCommandTelemetry(limit = 80) {
+    const all = await this.readAll();
+    return (all.commandTelemetry ?? []).slice(0, limit).map((event) => normalizeTelemetryEvent(event));
+  }
+
+  async getCommandTelemetrySummary(limit = 200) {
+    const events = await this.getCommandTelemetry(limit);
+    return summarizeTelemetry(events);
   }
 }
 
@@ -502,6 +624,31 @@ class PostgresSettingsStore {
       ADD COLUMN IF NOT EXISTS assemblyai_enabled BOOLEAN NOT NULL DEFAULT FALSE,
       ADD COLUMN IF NOT EXISTS local_whisper_enabled BOOLEAN NOT NULL DEFAULT FALSE,
       ADD COLUMN IF NOT EXISTS assemblyai_stt_model TEXT NOT NULL DEFAULT 'universal-3-pro'
+    `);
+
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS command_telemetry (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        guild_name TEXT NOT NULL,
+        speaker_id TEXT,
+        speaker_tag TEXT NOT NULL,
+        wake_word TEXT,
+        transcript TEXT,
+        status TEXT NOT NULL,
+        reason TEXT,
+        command_type TEXT,
+        provider TEXT,
+        model TEXT,
+        stt_latency_ms INTEGER,
+        total_latency_ms INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await this.pool.query(`
+      CREATE INDEX IF NOT EXISTS command_telemetry_created_at_idx
+      ON command_telemetry (created_at DESC)
     `);
   }
 
@@ -868,6 +1015,85 @@ class PostgresSettingsStore {
 
     return this.getSharedGuildState(guildId, guildName);
   }
+
+  async recordCommandTelemetry(event) {
+    const normalized = normalizeTelemetryEvent(event);
+    await this.pool.query(
+      `
+        INSERT INTO command_telemetry (
+          id, guild_id, guild_name, speaker_id, speaker_tag, wake_word, transcript,
+          status, reason, command_type, provider, model, stt_latency_ms, total_latency_ms, created_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7,
+          $8, $9, $10, $11, $12, $13, $14, $15
+        )
+      `,
+      [
+        normalized.id,
+        normalized.guildId,
+        normalized.guildName,
+        normalized.speakerId || null,
+        normalized.speakerTag,
+        normalized.wakeWord || null,
+        normalized.transcript || null,
+        normalized.status,
+        normalized.reason || null,
+        normalized.commandType || null,
+        normalized.provider || null,
+        normalized.model || null,
+        normalized.sttLatencyMs,
+        normalized.totalLatencyMs,
+        new Date(normalized.createdAt),
+      ]
+    );
+
+    await this.pool.query(`
+      DELETE FROM command_telemetry
+      WHERE id IN (
+        SELECT id FROM command_telemetry
+        ORDER BY created_at DESC
+        OFFSET 3000
+      )
+    `);
+
+    return normalized;
+  }
+
+  async getCommandTelemetry(limit = 80) {
+    const result = await this.pool.query(
+      `
+        SELECT * FROM command_telemetry
+        ORDER BY created_at DESC
+        LIMIT $1
+      `,
+      [limit]
+    );
+
+    return result.rows.map((row) =>
+      normalizeTelemetryEvent({
+        id: row.id,
+        guildId: row.guild_id,
+        guildName: row.guild_name,
+        speakerId: row.speaker_id,
+        speakerTag: row.speaker_tag,
+        wakeWord: row.wake_word,
+        transcript: row.transcript,
+        status: row.status,
+        reason: row.reason,
+        commandType: row.command_type,
+        provider: row.provider,
+        model: row.model,
+        sttLatencyMs: row.stt_latency_ms,
+        totalLatencyMs: row.total_latency_ms,
+        createdAt: row.created_at,
+      })
+    );
+  }
+
+  async getCommandTelemetrySummary(limit = 200) {
+    const events = await this.getCommandTelemetry(limit);
+    return summarizeTelemetry(events);
+  }
 }
 
 function createSettingsStore(config) {
@@ -882,7 +1108,9 @@ module.exports = {
   createDefaultGuildSettings,
   createDefaultGlobalAdminSettings,
   createSettingsStore,
+  normalizeTelemetryEvent,
   normalizeGlobalAdminSettings,
   normalizeGuildSettings,
   parseStringList,
+  summarizeTelemetry,
 };

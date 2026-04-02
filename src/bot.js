@@ -63,6 +63,18 @@ function createBot({ config, store }) {
     return fallback;
   }
 
+  async function recordCommandTelemetry(event) {
+    if (typeof store.recordCommandTelemetry !== "function") {
+      return;
+    }
+
+    try {
+      await store.recordCommandTelemetry(event);
+    } catch (error) {
+      log("Command telemetry failed", error?.details ?? error);
+    }
+  }
+
   function collectTranscriptionKeyterms(guild, runtimeVoiceSettings) {
     const terms = new Set();
     const addTerm = (value) => {
@@ -425,32 +437,32 @@ function createBot({ config, store }) {
 
     if (!guildSettings.botEnabled) {
       await sendStatus(guild, "This server has MOON paused in the dashboard.");
-      return;
+      return { status: "blocked", reason: "bot-disabled" };
     }
 
     if ((command.confidence ?? 1) < getCommandConfidenceFloor(command.type)) {
       await sendStatus(guild, `I heard \`${transcript}\`, but I am not confident enough to run that command.`);
-      return;
+      return { status: "blocked", reason: "low-command-confidence" };
     }
 
     if (command.type === "drag" && !guildSettings.commandDragEnabled) {
       await sendStatus(guild, "Drag commands are disabled in the dashboard.");
-      return;
+      return { status: "blocked", reason: "drag-disabled" };
     }
 
     if ((command.type === "mute" || command.type === "unmute") && !guildSettings.commandMuteEnabled) {
       await sendStatus(guild, "Mute commands are disabled in the dashboard.");
-      return;
+      return { status: "blocked", reason: "mute-disabled" };
     }
 
     if (command.type === "kick" && !guildSettings.commandKickEnabled) {
       await sendStatus(guild, "Kick commands are disabled in the dashboard.");
-      return;
+      return { status: "blocked", reason: "kick-disabled" };
     }
 
     if ((command.type === "lock" || command.type === "unlock") && !guildSettings.commandLockEnabled) {
       await sendStatus(guild, "Lock commands are disabled in the dashboard.");
-      return;
+      return { status: "blocked", reason: "lock-disabled" };
     }
 
     if (command.type === "lock") {
@@ -460,7 +472,7 @@ function createBot({ config, store }) {
         { reason: `MOON voice command by ${controller.user.tag}` }
       );
       await sendStatus(guild, `Locked **${controllerChannel.name}**.`);
-      return;
+      return { status: "success", reason: "lock" };
     }
 
     if (command.type === "unlock") {
@@ -470,13 +482,13 @@ function createBot({ config, store }) {
         { reason: `MOON voice command by ${controller.user.tag}` }
       );
       await sendStatus(guild, `Unlocked **${controllerChannel.name}**.`);
-      return;
+      return { status: "success", reason: "unlock" };
     }
 
     if (command.type === "spam-stop") {
       const stopped = stopSpamJob(guild.id);
       await sendStatus(guild, stopped ? "Stopped the active spam job." : "There is no active spam job right now.");
-      return;
+      return { status: "success", reason: stopped ? "spam-stopped" : "spam-not-running" };
     }
 
     if (command.type === "say" || command.type === "spam") {
@@ -484,7 +496,7 @@ function createBot({ config, store }) {
       const channelMatch = await resolveTextChannel(guild, command.channelName);
       if (!channelMatch.channel) {
         await sendStatus(guild, `I couldn't find a text channel named **${command.channelName}**.`);
-        return;
+        return { status: "blocked", reason: "text-channel-missing" };
       }
 
       if (channelMatch.ambiguous) {
@@ -495,35 +507,35 @@ function createBot({ config, store }) {
             ? `I found multiple text channels close to **${command.channelName}**: **${channelMatch.channel.name}** and **${secondChannelName}**.`
             : `I found multiple text channels close to **${command.channelName}**.`
         );
-        return;
+        return { status: "blocked", reason: "text-channel-ambiguous" };
       }
 
       if (!canSendText(channelMatch.channel, botMember)) {
         await sendStatus(guild, `I can't send messages in **${channelMatch.channel.name}**.`);
-        return;
+        return { status: "blocked", reason: "text-channel-no-send" };
       }
 
       const safeMessage = String(command.message ?? "").trim().slice(0, 300);
       if (!safeMessage) {
         await sendStatus(guild, "I need some message text for that command.");
-        return;
+        return { status: "blocked", reason: "missing-message" };
       }
 
       if (messageRequestsEveryoneMention(safeMessage) && !canMentionEveryone(channelMatch.channel, botMember)) {
         await sendStatus(guild, `I don't have permission to mention everyone in **${channelMatch.channel.name}**.`);
-        return;
+        return { status: "blocked", reason: "mention-everyone-denied" };
       }
 
       if (command.type === "say") {
         await sendPlainText(channelMatch.channel, safeMessage);
         await sendStatus(guild, `Sent a message in **${channelMatch.channel.name}**.`);
-        return;
+        return { status: "success", reason: "say" };
       }
 
       const spamCount = Math.min(Math.max(command.count || 1, 1), 5);
       startSpamJob(guild, channelMatch.channel, safeMessage, spamCount);
       await sendStatus(guild, `Started spam in **${channelMatch.channel.name}** for **${spamCount}** messages.`);
-      return;
+      return { status: "success", reason: "spam-started" };
     }
 
     if (command.type === "mention") {
@@ -531,7 +543,7 @@ function createBot({ config, store }) {
       const channelMatch = await resolveTextChannel(guild, command.channelName);
       if (!channelMatch.channel) {
         await sendStatus(guild, `I couldn't find a text channel named **${command.channelName}**.`);
-        return;
+        return { status: "blocked", reason: "text-channel-missing" };
       }
 
       if (channelMatch.ambiguous) {
@@ -542,12 +554,12 @@ function createBot({ config, store }) {
             ? `I found multiple text channels close to **${command.channelName}**: **${channelMatch.channel.name}** and **${secondChannelName}**.`
             : `I found multiple text channels close to **${command.channelName}**.`
         );
-        return;
+        return { status: "blocked", reason: "text-channel-ambiguous" };
       }
 
       if (!canSendText(channelMatch.channel, botMember)) {
         await sendStatus(guild, `I can't send messages in **${channelMatch.channel.name}**.`);
-        return;
+        return { status: "blocked", reason: "text-channel-no-send" };
       }
 
       const wantsEveryoneMention =
@@ -557,12 +569,12 @@ function createBot({ config, store }) {
       if (wantsEveryoneMention) {
         if (!canMentionEveryone(channelMatch.channel, botMember)) {
           await sendStatus(guild, `I don't have permission to mention everyone in **${channelMatch.channel.name}**.`);
-          return;
+          return { status: "blocked", reason: "mention-everyone-denied" };
         }
 
         await sendMentionText(channelMatch.channel, [], { everyone: true });
         await sendStatus(guild, `Mentioned **@everyone** in **${channelMatch.channel.name}**.`);
-        return;
+        return { status: "success", reason: "mention-everyone" };
       }
 
       const mentionTargets = await resolveCommandTargets(guild, speaker, controller, command, getTargetConfidenceFloor);
@@ -571,7 +583,7 @@ function createBot({ config, store }) {
           guild,
           formatResolutionFailures(transcript, mentionTargets.failures) ?? `I heard \`${transcript}\`, but I couldn't confidently resolve the target.`
         );
-        return;
+        return { status: "blocked", reason: "target-resolution-failed" };
       }
 
       await sendMentionText(channelMatch.channel, mentionTargets.members);
@@ -579,7 +591,7 @@ function createBot({ config, store }) {
       if (mentionTargets.failures.length) {
         await sendStatus(guild, formatResolutionFailures(transcript, mentionTargets.failures));
       }
-      return;
+      return { status: "success", reason: "mention" };
     }
 
     const targetResult = await resolveCommandTargets(guild, speaker, controller, command, getTargetConfidenceFloor);
@@ -588,7 +600,7 @@ function createBot({ config, store }) {
         guild,
         formatResolutionFailures(transcript, targetResult.failures) ?? `I heard \`${transcript}\`, but I couldn't confidently resolve the target.`
       );
-      return;
+      return { status: "blocked", reason: "target-resolution-failed" };
     }
 
     if (command.type === "role-add" || command.type === "role-remove") {
@@ -751,7 +763,7 @@ function createBot({ config, store }) {
           messages.push(formatResolutionFailures(transcript, targetResult.failures));
         }
         await sendStatus(guild, messages.filter(Boolean).join(" ") || `I couldn't move anyone into **${destination.channel.name}**.`);
-        return;
+        return { status: "blocked", reason: "no-move-targets" };
       }
 
       const movedTargets = botTarget ? [...movedMembers, botTarget] : movedMembers;
@@ -769,7 +781,7 @@ function createBot({ config, store }) {
       if (targetResult.failures.length) {
         await sendStatus(guild, formatResolutionFailures(transcript, targetResult.failures));
       }
-      return;
+      return { status: "success", reason: "drag" };
     }
 
     let targets = targetResult.members;
@@ -783,7 +795,7 @@ function createBot({ config, store }) {
       if (targets.length === 1 && targets[0].id === guild.members.me?.id) {
         destroySession(guild.id);
         await sendStatusToChannel(guild, session.textChannelId, "Disconnected from voice.");
-        return;
+        return { status: "success", reason: "disconnect-bot" };
       }
     }
 
@@ -823,7 +835,7 @@ function createBot({ config, store }) {
         messages.push(formatResolutionFailures(transcript, targetResult.failures));
       }
       await sendStatus(guild, messages.filter(Boolean).join(" ") || `I couldn't execute \`${command.type}\` for that target.`);
-      return;
+      return { status: "blocked", reason: "target-not-in-voice" };
     }
 
     if (command.type === "mute") {
@@ -859,6 +871,7 @@ function createBot({ config, store }) {
     if (targetResult.failures.length) {
       await sendStatus(guild, formatResolutionFailures(transcript, targetResult.failures));
     }
+    return { status: "success", reason: command.type };
   }
 
   async function processSpeechJob(guild, job) {
@@ -892,16 +905,39 @@ function createBot({ config, store }) {
     ]);
     session.guildSettingsSnapshot = guildSettings;
     session.runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings, config);
+    const telemetryBase = {
+      guildId: guild.id,
+      guildName: guild.name,
+      speakerId: speaker.id,
+      speakerTag: speaker.user.tag,
+      wakeWord: session.runtimeVoiceSettings.wakeWord,
+      totalLatencyMs: Date.now() - job.capturedAt,
+    };
 
     if (globalAdminSettings && !globalAdminSettings.globalBotEnabled) {
+      await recordCommandTelemetry({
+        ...telemetryBase,
+        status: "blocked",
+        reason: "global-bot-disabled",
+      });
       return;
     }
 
     if (!memberCanUseVoiceCommands(speaker, session, guildSettings)) {
+      await recordCommandTelemetry({
+        ...telemetryBase,
+        status: "blocked",
+        reason: "speaker-not-allowed",
+      });
       return;
     }
 
     if (!session.runtimeVoiceSettings.transcriptionEnabled) {
+      await recordCommandTelemetry({
+        ...telemetryBase,
+        status: "blocked",
+        reason: "transcription-disabled",
+      });
       return;
     }
 
@@ -911,7 +947,7 @@ function createBot({ config, store }) {
     }
 
     const keyterms = collectTranscriptionKeyterms(guild, session.runtimeVoiceSettings);
-    const transcript = await transcribePcmBuffer(pcmBuffer, {
+    const transcription = await transcribePcmBuffer(pcmBuffer, {
       preferredSttProvider: globalAdminSettings?.preferredSttProvider,
       groqEnabled: globalAdminSettings?.groqEnabled,
       deepgramEnabled: globalAdminSettings?.deepgramEnabled,
@@ -923,7 +959,18 @@ function createBot({ config, store }) {
       whisperPrompt: buildTranscriptionPrompt(session.runtimeVoiceSettings, keyterms),
       keyterms,
     });
+    const transcript = transcription?.text?.trim?.() ?? "";
     if (!transcript || isIgnorableTranscript(transcript)) {
+      await recordCommandTelemetry({
+        ...telemetryBase,
+        transcript,
+        provider: transcription?.provider,
+        model: transcription?.model,
+        sttLatencyMs: transcription?.sttLatencyMs,
+        totalLatencyMs: Date.now() - job.capturedAt,
+        status: "ignored",
+        reason: "ignorable-transcript",
+      });
       return;
     }
 
@@ -934,6 +981,16 @@ function createBot({ config, store }) {
     });
     if (!command) {
       log(`Ignored transcript from ${speaker.user.tag}: ${transcript}`);
+      await recordCommandTelemetry({
+        ...telemetryBase,
+        transcript,
+        provider: transcription?.provider,
+        model: transcription?.model,
+        sttLatencyMs: transcription?.sttLatencyMs,
+        totalLatencyMs: Date.now() - job.capturedAt,
+        status: "ignored",
+        reason: "parse-failed",
+      });
       return;
     }
 
@@ -957,7 +1014,7 @@ function createBot({ config, store }) {
       confidence: command.confidence,
     });
 
-    await executeVoiceCommand(
+    const executionResult = await executeVoiceCommand(
       guild,
       latestSession,
       command,
@@ -966,6 +1023,17 @@ function createBot({ config, store }) {
       controller,
       speaker
     );
+    await recordCommandTelemetry({
+      ...telemetryBase,
+      transcript,
+      commandType: command.type,
+      provider: transcription?.provider,
+      model: transcription?.model,
+      sttLatencyMs: transcription?.sttLatencyMs,
+      totalLatencyMs: Date.now() - job.capturedAt,
+      status: executionResult?.status ?? "success",
+      reason: executionResult?.reason ?? command.type,
+    });
   }
 
   async function drainSpeechQueue(guild) {
@@ -989,6 +1057,21 @@ function createBot({ config, store }) {
       await processSpeechJob(guild, nextJob);
     } catch (error) {
       log("Voice command failed", error?.details ?? error);
+      const sessionForTelemetry = getSession(guild.id);
+      const speaker =
+        nextJob?.userId
+          ? guild.members.cache.get(nextJob.userId) ?? (await guild.members.fetch(nextJob.userId).catch(() => null))
+          : null;
+      await recordCommandTelemetry({
+        guildId: guild.id,
+        guildName: guild.name,
+        speakerId: speaker?.id ?? nextJob?.userId ?? "",
+        speakerTag: speaker?.user?.tag ?? "unknown",
+        wakeWord: sessionForTelemetry?.runtimeVoiceSettings?.wakeWord ?? "",
+        status: "failed",
+        reason: "execution-error",
+        totalLatencyMs: nextJob?.capturedAt ? Date.now() - nextJob.capturedAt : null,
+      });
       await sendStatus(guild, formatUserFacingError(error, "Voice command failed. Please try again."));
     } finally {
       const latestSession = getSession(guild.id);

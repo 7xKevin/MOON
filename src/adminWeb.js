@@ -355,7 +355,11 @@ function createAdminApp({ config, store }) {
 
   app.get("/dashboard", requireAuth, requireSuperAdmin, async (req, res, next) => {
     try {
-      const globalSettings = await store.getGlobalAdminSettings();
+      const [globalSettings, telemetrySummary, recentTelemetry] = await Promise.all([
+        store.getGlobalAdminSettings(),
+        typeof store.getCommandTelemetrySummary === "function" ? store.getCommandTelemetrySummary(250) : null,
+        typeof store.getCommandTelemetry === "function" ? store.getCommandTelemetry(40) : [],
+      ]);
       const providerCatalog = buildProviderCatalog(config, globalSettings);
 
       res.render("admin-dashboard", {
@@ -363,6 +367,8 @@ function createAdminApp({ config, store }) {
         saved: req.query.saved === "1",
         settings: globalSettings,
         providerCatalog,
+        telemetrySummary,
+        recentTelemetry,
         systemStatus: {
           hasGroqStt: config.hasGroqStt,
           hasDeepgramStt: config.hasDeepgramStt,

@@ -61,6 +61,111 @@
           <input type="hidden" name="csrfToken" value="<%= csrfToken %>" />
 
           <section class="card admin-panel">
+            <div class="card-body form-section">
+              <div class="admin-section-head">
+                <h2 class="section-title">Command diagnostics</h2>
+                <span class="meta">Recent real command outcomes from the live bot.</span>
+              </div>
+
+              <div class="admin-stats-grid">
+                <div class="admin-stat-tile">
+                  <span class="eyebrow">attempts</span>
+                  <strong><%= telemetrySummary?.total ?? 0 %></strong>
+                </div>
+                <div class="admin-stat-tile">
+                  <span class="eyebrow">success</span>
+                  <strong><%= telemetrySummary?.success ?? 0 %></strong>
+                </div>
+                <div class="admin-stat-tile">
+                  <span class="eyebrow">failed / blocked</span>
+                  <strong><%= telemetrySummary?.failed ?? 0 %></strong>
+                </div>
+                <div class="admin-stat-tile">
+                  <span class="eyebrow">avg stt</span>
+                  <strong><%= telemetrySummary?.averageSttLatencyMs ?? "—" %><% if (telemetrySummary?.averageSttLatencyMs !== null) { %>ms<% } %></strong>
+                </div>
+                <div class="admin-stat-tile">
+                  <span class="eyebrow">avg total</span>
+                  <strong><%= telemetrySummary?.averageTotalLatencyMs ?? "—" %><% if (telemetrySummary?.averageTotalLatencyMs !== null) { %>ms<% } %></strong>
+                </div>
+              </div>
+
+              <div class="admin-diagnostics-grid">
+                <section class="admin-diagnostic-block">
+                  <div class="eyebrow">providers</div>
+                  <% const providers = Object.entries(telemetrySummary?.providers ?? {}); %>
+                  <% if (!providers.length) { %>
+                    <div class="meta">No runtime command data yet.</div>
+                  <% } %>
+                  <% providers.forEach(([providerKey, provider]) => { %>
+                    <div class="admin-list-row">
+                      <strong><%= providerKey %></strong>
+                      <span><%= provider.success %>/<%= provider.total %> success</span>
+                      <span><%= provider.avgSttLatencyMs ?? "—" %><% if (provider.avgSttLatencyMs !== null) { %>ms<% } %></span>
+                    </div>
+                  <% }) %>
+                </section>
+
+                <section class="admin-diagnostic-block">
+                  <div class="eyebrow">failure reasons</div>
+                  <% const reasons = Object.entries(telemetrySummary?.reasons ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 8); %>
+                  <% if (!reasons.length) { %>
+                    <div class="meta">No failures recorded recently.</div>
+                  <% } %>
+                  <% reasons.forEach(([reason, count]) => { %>
+                    <div class="admin-list-row">
+                      <strong><%= reason %></strong>
+                      <span><%= count %></span>
+                    </div>
+                  <% }) %>
+                </section>
+
+                <section class="admin-diagnostic-block">
+                  <div class="eyebrow">command families</div>
+                  <% const commands = Object.entries(telemetrySummary?.commands ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 8); %>
+                  <% if (!commands.length) { %>
+                    <div class="meta">No command executions yet.</div>
+                  <% } %>
+                  <% commands.forEach(([commandName, count]) => { %>
+                    <div class="admin-list-row">
+                      <strong><%= commandName %></strong>
+                      <span><%= count %></span>
+                    </div>
+                  <% }) %>
+                </section>
+              </div>
+
+              <div class="admin-log-table">
+                <div class="admin-log-head admin-log-row">
+                  <span>time</span>
+                  <span>speaker</span>
+                  <span>status</span>
+                  <span>provider</span>
+                  <span>command</span>
+                  <span>reason</span>
+                  <span>stt</span>
+                  <span>total</span>
+                </div>
+                <% if (!recentTelemetry?.length) { %>
+                  <div class="meta">No command attempts recorded yet.</div>
+                <% } %>
+                <% recentTelemetry.forEach((event) => { %>
+                  <div class="admin-log-row">
+                    <span><%= new Date(event.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) %></span>
+                    <span title="<%= event.guildName %>"><%= event.speakerTag %></span>
+                    <span class="badge <%= event.status === 'success' ? 'live' : '' %>"><%= event.status %></span>
+                    <span><%= event.provider || "—" %></span>
+                    <span title="<%= event.transcript %>"><%= event.commandType || "—" %></span>
+                    <span><%= event.reason || "—" %></span>
+                    <span><%= event.sttLatencyMs ?? "—" %><% if (event.sttLatencyMs !== null) { %>ms<% } %></span>
+                    <span><%= event.totalLatencyMs ?? "—" %><% if (event.totalLatencyMs !== null) { %>ms<% } %></span>
+                  </div>
+                <% }) %>
+              </div>
+            </div>
+          </section>
+
+          <section class="card admin-panel">
             <div class="card-body">
               <div class="badge-row">
                 <span class="eyebrow">global state</span>

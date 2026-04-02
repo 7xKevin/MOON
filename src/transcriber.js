@@ -349,28 +349,59 @@ async function transcribePcmBuffer(pcmBuffer, overrides = {}) {
   try {
     for (const provider of providerOrder) {
       try {
+        const startedAt = Date.now();
         if (provider === "groq") {
-          return await transcribeViaGroq(wavBuffer, settings);
+          const text = await transcribeViaGroq(wavBuffer, settings);
+          return {
+            text,
+            provider,
+            model: settings.groqSttModel,
+            sttLatencyMs: Date.now() - startedAt,
+          };
         }
 
         if (provider === "deepgram") {
-          return await transcribeViaDeepgram(wavBuffer, settings);
+          const text = await transcribeViaDeepgram(wavBuffer, settings);
+          return {
+            text,
+            provider,
+            model: settings.deepgramSttModel,
+            sttLatencyMs: Date.now() - startedAt,
+          };
         }
 
         if (provider === "assemblyai") {
-          return await transcribeViaAssemblyAi(wavBuffer, settings);
+          const text = await transcribeViaAssemblyAi(wavBuffer, settings);
+          return {
+            text,
+            provider,
+            model: settings.assemblyAiSttModel,
+            sttLatencyMs: Date.now() - startedAt,
+          };
         }
 
         if (provider === "local") {
           if (isWhisperServerReady()) {
             try {
-              return await transcribeViaServer(wavBuffer, settings);
+              const text = await transcribeViaServer(wavBuffer, settings);
+              return {
+                text,
+                provider,
+                model: "whisper-server",
+                sttLatencyMs: Date.now() - startedAt,
+              };
             } catch (error) {
               console.warn("[MOON] Whisper server request failed, falling back to CLI.", error?.details ?? error);
             }
           }
 
-          return await runWhisperCpp(wavBuffer, outputBasePath, settings);
+          const text = await runWhisperCpp(wavBuffer, outputBasePath, settings);
+          return {
+            text,
+            provider,
+            model: config.WHISPER_MODEL_PATH ? path.basename(config.WHISPER_MODEL_PATH) : "whisper.cpp",
+            sttLatencyMs: Date.now() - startedAt,
+          };
         }
       } catch (error) {
         console.warn(`[MOON] ${provider} transcription failed, falling back.`, error?.details ?? error);
