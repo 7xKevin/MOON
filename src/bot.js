@@ -164,6 +164,14 @@ function createBot({ config, store }) {
     return store.getGuildSettings(guild.id, guild.name, userId);
   }
 
+  async function getGlobalAdminSettings() {
+    if (typeof store.getGlobalAdminSettings !== "function") {
+      return null;
+    }
+
+    return store.getGlobalAdminSettings();
+  }
+
   async function syncBotPresence(clientInstance) {
     if (typeof store.resetBotPresence === "function") {
       await store.resetBotPresence();
@@ -771,9 +779,16 @@ function createBot({ config, store }) {
       return;
     }
 
-    const guildSettings = await getGuildSettings(guild, session.ownerUserId);
+    const [guildSettings, globalAdminSettings] = await Promise.all([
+      getGuildSettings(guild, session.ownerUserId),
+      getGlobalAdminSettings(),
+    ]);
     session.guildSettingsSnapshot = guildSettings;
     session.runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings, config);
+
+    if (globalAdminSettings && !globalAdminSettings.globalBotEnabled) {
+      return;
+    }
 
     if (!memberCanUseVoiceCommands(speaker, session, guildSettings)) {
       return;
@@ -788,7 +803,10 @@ function createBot({ config, store }) {
       return;
     }
 
-    const transcript = await transcribePcmBuffer(pcmBuffer);
+    const transcript = await transcribePcmBuffer(pcmBuffer, {
+      preferredSttProvider: globalAdminSettings?.preferredSttProvider,
+      groqSttModel: globalAdminSettings?.groqSttModel,
+    });
     if (!transcript || isIgnorableTranscript(transcript)) {
       return;
     }
@@ -956,7 +974,13 @@ function createBot({ config, store }) {
     }
 
     const ownerUserId = member.id;
-    const guildSettings = await getGuildSettings(member.guild, ownerUserId);
+    const [guildSettings, globalAdminSettings] = await Promise.all([
+      getGuildSettings(member.guild, ownerUserId),
+      getGlobalAdminSettings(),
+    ]);
+    if (globalAdminSettings && !globalAdminSettings.globalBotEnabled) {
+      throw createUserFacingError("MOON is globally paused by MOON ADMIN.");
+    }
     if (!guildSettings.botEnabled) {
       throw createUserFacingError("MOON is paused for this server in the dashboard.");
     }
@@ -1047,7 +1071,10 @@ function createBot({ config, store }) {
     const commandName = content.slice(config.PREFIX.length).trim().toLowerCase();
 
     try {
-      const guildSettings = await getGuildSettings(message.guild, message.author.id);
+      const [guildSettings, globalAdminSettings] = await Promise.all([
+        getGuildSettings(message.guild, message.author.id),
+        getGlobalAdminSettings(),
+      ]);
 
       if (commandName === "help") {
         await message.reply(getHelpText(guildSettings));
@@ -1060,6 +1087,11 @@ function createBot({ config, store }) {
       }
 
       if (commandName === "join") {
+        if (globalAdminSettings && !globalAdminSettings.globalBotEnabled) {
+          await message.reply("MOON is globally paused by MOON ADMIN.");
+          return;
+        }
+
         if (!memberHasDashboardAdmin(message.member, guildSettings)) {
           await message.reply("Only server admins or configured MOON admins can start a session.");
           return;

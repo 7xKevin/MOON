@@ -1,5 +1,6 @@
 const http = require("node:http");
 const { config } = require("./config");
+const { createAdminApp } = require("./adminWeb");
 const { createBot } = require("./bot");
 const { createSettingsStore } = require("./settingsStore");
 const { createWebApp } = require("./web");
@@ -45,6 +46,11 @@ async function main() {
   if (config.SERVICE_MODE === "web" || config.SERVICE_MODE === "all") {
     const web = createWebApp({ config, store });
     runners.push(web.start());
+  }
+
+  if (config.SERVICE_MODE === "admin") {
+    const admin = createAdminApp({ config, store });
+    runners.push(admin.start());
   }
 
   await Promise.all(runners);

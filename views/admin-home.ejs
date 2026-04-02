@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="/static/theme.js" defer></script>
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body class="admin-page">
+    <div class="layout">
+      <aside class="sidebar">
+        <a class="brand" href="/">
+          <span class="moon-logo brand-logo" aria-hidden="true">
+            <span class="moon-logo-ring"></span>
+            <span class="moon-logo-core"></span>
+            <span class="moon-logo-orbit moon-logo-orbit-one"></span>
+            <span class="moon-logo-orbit moon-logo-orbit-two"></span>
+          </span>
+          <span class="brand-copy">
+            <strong>MOON ADMIN</strong>
+            <span>Global control surface</span>
+          </span>
+        </a>
+
+        <div class="sidebar-section">
+          <p class="sidebar-label">Navigation</p>
+          <nav class="sidebar-nav">
+            <a class="nav-item active" href="/">Overview</a>
+            <% if (userDashboardUrl) { %>
+              <a class="nav-item" href="<%= userDashboardUrl %>" target="_blank" rel="noreferrer">Public Dashboard</a>
+            <% } %>
+          </nav>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <h1 class="page-title">MOON ADMIN</h1>
+            <div class="meta">Private control room for live runtime settings.</div>
+          </div>
+          <div class="actions">
+            <button class="theme-toggle" type="button" data-theme-toggle>
+              Theme: <span data-theme-label>Light</span>
+            </button>
+            <% if (loggedIn) { %>
+              <a class="button primary" href="/dashboard">Open Admin</a>
+            <% } else { %>
+              <a class="button primary" href="/login">Log In With Discord</a>
+            <% } %>
+          </div>
+        </header>
+
+        <% if (typeof error !== "undefined" && error) { %>
+          <div class="notice error"><%= error %></div>
+        <% } %>
+
+        <section class="hero">
+          <article class="card">
+            <div class="card-body stack">
+              <div class="badge-row">
+                <span class="eyebrow">Super-admin access</span>
+                <span class="badge live">Discord-authenticated</span>
+                <span class="badge">Runtime controls</span>
+              </div>
+              <h2 class="headline admin-headline">Global bot control with a Discord-native UI and a developer-grade control surface.</h2>
+              <p class="section-lead">
+                Use MOON ADMIN to steer the live bot, set default speech runtime behavior, and control whether the public dashboard stays available to regular guild admins.
+              </p>
+              <div class="landing-highlight-row admin-highlight-row">
+                <div class="landing-highlight-pill">
+                  <strong>Global pause</strong>
+                  <span>Freeze or resume bot execution everywhere.</span>
+                </div>
+                <div class="landing-highlight-pill">
+                  <strong>Speech control</strong>
+                  <span>Set STT provider preference and models centrally.</span>
+                </div>
+                <div class="landing-highlight-pill">
+                  <strong>Website control</strong>
+                  <span>Pause the public dashboard without touching deploys.</span>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <aside class="card admin-side-card">
+            <div class="card-body stack">
+              <span class="eyebrow">How it works</span>
+              <div class="admin-status-grid">
+                <div class="stat">
+                  <strong>1. Authenticate</strong>
+                  <span>Sign in with your Discord account.</span>
+                </div>
+                <div class="stat">
+                  <strong>2. Verify</strong>
+                  <span>Only configured super-admin IDs can enter.</span>
+                </div>
+                <div class="stat">
+                  <strong>3. Control</strong>
+                  <span>Adjust live defaults without disturbing the public site.</span>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

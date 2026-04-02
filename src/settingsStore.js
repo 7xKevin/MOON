@@ -40,6 +40,14 @@ function normalizePositiveInteger(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function normalizeBoolean(value, fallback) {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  return value === true;
+}
+
 function normalizeGuildSettings(input = {}, defaults = {}) {
   return {
     guildId: String(input.guildId ?? "").trim(),
@@ -85,11 +93,47 @@ function createDefaultGuildSettings(guildId, guildName, defaults = {}) {
   );
 }
 
+function normalizeGlobalAdminSettings(input = {}, defaults = {}) {
+  return {
+    globalBotEnabled: normalizeBoolean(input.globalBotEnabled, defaults.globalBotEnabled !== false),
+    userDashboardEnabled: normalizeBoolean(
+      input.userDashboardEnabled,
+      defaults.userDashboardEnabled !== false
+    ),
+    preferredSttProvider:
+      String(input.preferredSttProvider ?? defaults.preferredSttProvider ?? "groq").trim().toLowerCase() || "groq",
+    groqSttModel:
+      String(input.groqSttModel ?? defaults.groqSttModel ?? "whisper-large-v3").trim() || "whisper-large-v3",
+    deepgramSttModel:
+      String(input.deepgramSttModel ?? defaults.deepgramSttModel ?? "nova-3").trim() || "nova-3",
+    defaultWakeWord:
+      String(input.defaultWakeWord ?? defaults.defaultWakeWord ?? "moon").trim() || "moon",
+    defaultRequireWakeWord: normalizeBoolean(
+      input.defaultRequireWakeWord,
+      defaults.defaultRequireWakeWord !== false
+    ),
+    defaultTranscriptionSilenceMs: normalizePositiveInteger(
+      input.defaultTranscriptionSilenceMs,
+      defaults.defaultTranscriptionSilenceMs ?? 550
+    ),
+    defaultCommandCooldownMs: normalizePositiveInteger(
+      input.defaultCommandCooldownMs,
+      defaults.defaultCommandCooldownMs ?? 250
+    ),
+    updatedAt: input.updatedAt ? new Date(input.updatedAt).toISOString() : new Date().toISOString(),
+  };
+}
+
+function createDefaultGlobalAdminSettings(defaults = {}) {
+  return normalizeGlobalAdminSettings({}, defaults);
+}
+
 function normalizeSettingsFileShape(raw) {
   if (raw && typeof raw === "object" && raw.sharedGuilds && raw.userGuildSettings) {
     return {
       sharedGuilds: raw.sharedGuilds,
       userGuildSettings: raw.userGuildSettings,
+      globalAdminSettings: raw.globalAdminSettings ?? {},
       legacyGuildSettings: raw.legacyGuildSettings ?? {},
     };
   }
@@ -109,6 +153,7 @@ function normalizeSettingsFileShape(raw) {
   return {
     sharedGuilds,
     userGuildSettings: {},
+    globalAdminSettings: {},
     legacyGuildSettings,
   };
 }
@@ -147,6 +192,17 @@ class FileSettingsStore {
       transcriptionSilenceMs: config.TRANSCRIPTION_SILENCE_MS,
       commandCooldownMs: config.COMMAND_COOLDOWN_MS,
     };
+    this.globalDefaults = {
+      globalBotEnabled: true,
+      userDashboardEnabled: true,
+      preferredSttProvider: config.hasGroqStt ? "groq" : "local",
+      groqSttModel: config.GROQ_STT_MODEL,
+      deepgramSttModel: config.DEEPGRAM_STT_MODEL,
+      defaultWakeWord: config.WAKE_WORD,
+      defaultRequireWakeWord: config.REQUIRE_WAKE_WORD,
+      defaultTranscriptionSilenceMs: config.TRANSCRIPTION_SILENCE_MS,
+      defaultCommandCooldownMs: config.COMMAND_COOLDOWN_MS,
+    };
   }
 
   async init() {
@@ -157,7 +213,16 @@ class FileSettingsStore {
     } catch {
       await fs.writeFile(
         this.filePath,
-        JSON.stringify({ sharedGuilds: {}, userGuildSettings: {}, legacyGuildSettings: {} }, null, 2)
+        JSON.stringify(
+          {
+            sharedGuilds: {},
+            userGuildSettings: {},
+            globalAdminSettings: createDefaultGlobalAdminSettings(this.globalDefaults),
+            legacyGuildSettings: {},
+          },
+          null,
+          2
+        )
       );
     }
   }
@@ -171,7 +236,30 @@ class FileSettingsStore {
     await fs.writeFile(this.filePath, JSON.stringify(data, null, 2));
   }
 
+  async getGlobalAdminSettings() {
+    const all = await this.readAll();
+    return normalizeGlobalAdminSettings(all.globalAdminSettings, this.globalDefaults);
+  }
+
+  async saveGlobalAdminSettings(settings) {
+    const all = await this.readAll();
+    all.globalAdminSettings = normalizeGlobalAdminSettings(settings, this.globalDefaults);
+    await this.writeAll(all);
+    return this.getGlobalAdminSettings();
+  }
+
+  async getRuntimeDefaults() {
+    const globalSettings = await this.getGlobalAdminSettings();
+    return {
+      wakeWord: globalSettings.defaultWakeWord,
+      requireWakeWord: globalSettings.defaultRequireWakeWord,
+      transcriptionSilenceMs: globalSettings.defaultTranscriptionSilenceMs,
+      commandCooldownMs: globalSettings.defaultCommandCooldownMs,
+    };
+  }
+
   async getGuildSettings(guildId, guildName = "Unknown Server", userId = null) {
+    const runtimeDefaults = await this.getRuntimeDefaults();
     const all = await this.readAll();
     const shared = all.sharedGuilds[guildId] ?? {
       guildId,
@@ -181,7 +269,7 @@ class FileSettingsStore {
     };
     const userSettings = userId ? all.userGuildSettings?.[guildId]?.[userId] : null;
     const legacySettings = all.legacyGuildSettings?.[guildId] ?? null;
-    const base = userSettings ?? legacySettings ?? createDefaultGuildSettings(guildId, guildName, this.defaults);
+    const base = userSettings ?? legacySettings ?? createDefaultGuildSettings(guildId, guildName, runtimeDefaults);
 
     return normalizeGuildSettings(
       {
@@ -191,12 +279,13 @@ class FileSettingsStore {
         botPresent: shared.botPresent,
         botLastSeenAt: shared.botLastSeenAt,
       },
-      this.defaults
+      runtimeDefaults
     );
   }
 
   async saveGuildSettings(settings, userId) {
-    const normalized = normalizeGuildSettings(settings, this.defaults);
+    const runtimeDefaults = await this.getRuntimeDefaults();
+    const normalized = normalizeGuildSettings(settings, runtimeDefaults);
     const all = await this.readAll();
     const shared = all.sharedGuilds[normalized.guildId] ?? {
       guildId: normalized.guildId,
@@ -265,6 +354,17 @@ class PostgresSettingsStore {
       requireWakeWord: config.REQUIRE_WAKE_WORD,
       transcriptionSilenceMs: config.TRANSCRIPTION_SILENCE_MS,
       commandCooldownMs: config.COMMAND_COOLDOWN_MS,
+    };
+    this.globalDefaults = {
+      globalBotEnabled: true,
+      userDashboardEnabled: true,
+      preferredSttProvider: config.hasGroqStt ? "groq" : "local",
+      groqSttModel: config.GROQ_STT_MODEL,
+      deepgramSttModel: config.DEEPGRAM_STT_MODEL,
+      defaultWakeWord: config.WAKE_WORD,
+      defaultRequireWakeWord: config.REQUIRE_WAKE_WORD,
+      defaultTranscriptionSilenceMs: config.TRANSCRIPTION_SILENCE_MS,
+      defaultCommandCooldownMs: config.COMMAND_COOLDOWN_MS,
     };
   }
 
@@ -341,6 +441,107 @@ class PostgresSettingsStore {
       ADD COLUMN IF NOT EXISTS command_cooldown_ms INTEGER NOT NULL DEFAULT 900,
       ADD COLUMN IF NOT EXISTS transcription_enabled BOOLEAN NOT NULL DEFAULT TRUE
     `);
+
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS global_admin_settings (
+        settings_key TEXT PRIMARY KEY,
+        global_bot_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        user_dashboard_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        preferred_stt_provider TEXT NOT NULL DEFAULT 'groq',
+        groq_stt_model TEXT NOT NULL DEFAULT 'whisper-large-v3',
+        deepgram_stt_model TEXT NOT NULL DEFAULT 'nova-3',
+        default_wake_word TEXT NOT NULL DEFAULT 'moon',
+        default_require_wake_word BOOLEAN NOT NULL DEFAULT TRUE,
+        default_transcription_silence_ms INTEGER NOT NULL DEFAULT 550,
+        default_command_cooldown_ms INTEGER NOT NULL DEFAULT 250,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+  }
+
+  async getGlobalAdminSettings() {
+    const result = await this.pool.query(
+      `SELECT * FROM global_admin_settings WHERE settings_key = 'global'`
+    );
+
+    if (!result.rowCount) {
+      return createDefaultGlobalAdminSettings(this.globalDefaults);
+    }
+
+    const row = result.rows[0];
+    return normalizeGlobalAdminSettings(
+      {
+        globalBotEnabled: row.global_bot_enabled,
+        userDashboardEnabled: row.user_dashboard_enabled,
+        preferredSttProvider: row.preferred_stt_provider,
+        groqSttModel: row.groq_stt_model,
+        deepgramSttModel: row.deepgram_stt_model,
+        defaultWakeWord: row.default_wake_word,
+        defaultRequireWakeWord: row.default_require_wake_word,
+        defaultTranscriptionSilenceMs: row.default_transcription_silence_ms,
+        defaultCommandCooldownMs: row.default_command_cooldown_ms,
+        updatedAt: row.updated_at,
+      },
+      this.globalDefaults
+    );
+  }
+
+  async saveGlobalAdminSettings(settings) {
+    const normalized = normalizeGlobalAdminSettings(settings, this.globalDefaults);
+    await this.pool.query(
+      `
+        INSERT INTO global_admin_settings (
+          settings_key,
+          global_bot_enabled,
+          user_dashboard_enabled,
+          preferred_stt_provider,
+          groq_stt_model,
+          deepgram_stt_model,
+          default_wake_word,
+          default_require_wake_word,
+          default_transcription_silence_ms,
+          default_command_cooldown_ms,
+          updated_at
+        ) VALUES (
+          'global', $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()
+        )
+        ON CONFLICT (settings_key)
+        DO UPDATE SET
+          global_bot_enabled = EXCLUDED.global_bot_enabled,
+          user_dashboard_enabled = EXCLUDED.user_dashboard_enabled,
+          preferred_stt_provider = EXCLUDED.preferred_stt_provider,
+          groq_stt_model = EXCLUDED.groq_stt_model,
+          deepgram_stt_model = EXCLUDED.deepgram_stt_model,
+          default_wake_word = EXCLUDED.default_wake_word,
+          default_require_wake_word = EXCLUDED.default_require_wake_word,
+          default_transcription_silence_ms = EXCLUDED.default_transcription_silence_ms,
+          default_command_cooldown_ms = EXCLUDED.default_command_cooldown_ms,
+          updated_at = NOW()
+      `,
+      [
+        normalized.globalBotEnabled,
+        normalized.userDashboardEnabled,
+        normalized.preferredSttProvider,
+        normalized.groqSttModel,
+        normalized.deepgramSttModel,
+        normalized.defaultWakeWord,
+        normalized.defaultRequireWakeWord,
+        normalized.defaultTranscriptionSilenceMs,
+        normalized.defaultCommandCooldownMs,
+      ]
+    );
+
+    return this.getGlobalAdminSettings();
+  }
+
+  async getRuntimeDefaults() {
+    const globalSettings = await this.getGlobalAdminSettings();
+    return {
+      wakeWord: globalSettings.defaultWakeWord,
+      requireWakeWord: globalSettings.defaultRequireWakeWord,
+      transcriptionSilenceMs: globalSettings.defaultTranscriptionSilenceMs,
+      commandCooldownMs: globalSettings.defaultCommandCooldownMs,
+    };
   }
 
   async getSharedGuildState(guildId, guildName = "Unknown Server") {
@@ -419,6 +620,7 @@ class PostgresSettingsStore {
   }
 
   async getGuildSettings(guildId, guildName = "Unknown Server", userId = null) {
+    const runtimeDefaults = await this.getRuntimeDefaults();
     const shared = await this.getSharedGuildState(guildId, guildName);
     let base = null;
 
@@ -455,7 +657,7 @@ class PostgresSettingsStore {
     }
 
     if (!base) {
-      base = (await this.getLegacyGuildSettings(guildId)) ?? createDefaultGuildSettings(guildId, guildName, this.defaults);
+      base = (await this.getLegacyGuildSettings(guildId)) ?? createDefaultGuildSettings(guildId, guildName, runtimeDefaults);
     }
 
     return normalizeGuildSettings(
@@ -466,12 +668,13 @@ class PostgresSettingsStore {
         botPresent: shared.botPresent,
         botLastSeenAt: shared.botLastSeenAt,
       },
-      this.defaults
+      runtimeDefaults
     );
   }
 
   async saveGuildSettings(settings, userId) {
-    const normalized = normalizeGuildSettings(settings, this.defaults);
+    const runtimeDefaults = await this.getRuntimeDefaults();
+    const normalized = normalizeGuildSettings(settings, runtimeDefaults);
     const effectiveUserId = userId || "global";
     const shared = await this.getSharedGuildState(normalized.guildId, normalized.guildName);
 
@@ -611,7 +814,9 @@ function createSettingsStore(config) {
 
 module.exports = {
   createDefaultGuildSettings,
+  createDefaultGlobalAdminSettings,
   createSettingsStore,
+  normalizeGlobalAdminSettings,
   normalizeGuildSettings,
   parseStringList,
 };

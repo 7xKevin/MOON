@@ -32,7 +32,7 @@ const optionalCsv = z.preprocess((value) => {
 }, z.array(z.string()).default([]));
 
 const schema = z.object({
-  SERVICE_MODE: z.enum(["bot", "web", "all"]).default("bot"),
+  SERVICE_MODE: z.enum(["bot", "web", "admin", "all"]).default("bot"),
   HOST: z.string().default("::"),
   PORT: z.coerce.number().int().positive().default(3000),
   PREFIX: z.string().default("!"),
@@ -44,12 +44,16 @@ const schema = z.object({
   APP_BASE_URL: optionalString,
   SESSION_SECRET: optionalString,
   DASHBOARD_SUPER_ADMIN_IDS: optionalCsv,
+  USER_DASHBOARD_URL: optionalString,
   DATABASE_URL: optionalString,
   DATA_DIR: z.string().default(path.join(process.cwd(), "data")),
   CONTROLLER_USER_ID: optionalString,
   GROQ_API_KEY: optionalString,
   GROQ_STT_MODEL: z.string().default("whisper-large-v3"),
   GROQ_STT_URL: z.string().default("https://api.groq.com/openai/v1/audio/transcriptions"),
+  DEEPGRAM_API_KEY: optionalString,
+  DEEPGRAM_STT_MODEL: z.string().default("nova-3"),
+  DEEPGRAM_STT_URL: z.string().default("https://api.deepgram.com/v1/listen"),
   WHISPER_CPP_PATH: optionalString,
   WHISPER_MODEL_PATH: optionalString,
   WHISPER_SERVER_PATH: optionalString,
@@ -106,7 +110,7 @@ if (config.SERVICE_MODE === "bot" || config.SERVICE_MODE === "all") {
   }
 }
 
-if (config.SERVICE_MODE === "web" || config.SERVICE_MODE === "all") {
+if (config.SERVICE_MODE === "web" || config.SERVICE_MODE === "all" || config.SERVICE_MODE === "admin") {
   requireSetting("DISCORD_CLIENT_ID", "running the dashboard");
   requireSetting("DISCORD_CLIENT_SECRET", "running the dashboard");
   requireSetting("SESSION_SECRET", "running the dashboard");
@@ -126,6 +130,7 @@ module.exports = {
     oauthRedirectUri: `${appBaseUrl}/auth/discord/callback`,
     whisperServerUrl,
     hasGroqStt: Boolean(config.GROQ_API_KEY),
+    hasDeepgramStt: Boolean(config.DEEPGRAM_API_KEY),
     hasLocalWhisper: Boolean(config.WHISPER_CPP_PATH && config.WHISPER_MODEL_PATH),
     isProduction: process.env.NODE_ENV === "production",
   },

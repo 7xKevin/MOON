@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="/static/theme.js" defer></script>
+    <script src="/static/app.js" defer></script>
+    <script src="/static/guild-settings.js" defer></script>
+  </head>
+  <body class="admin-page">
+    <div class="layout">
+      <aside class="sidebar">
+        <a class="brand" href="/dashboard">
+          <span class="moon-logo brand-logo" aria-hidden="true">
+            <span class="moon-logo-ring"></span>
+            <span class="moon-logo-core"></span>
+            <span class="moon-logo-orbit moon-logo-orbit-one"></span>
+            <span class="moon-logo-orbit moon-logo-orbit-two"></span>
+          </span>
+          <span class="brand-copy">
+            <strong>MOON ADMIN</strong>
+            <span><%= currentUser.globalName || currentUser.username %></span>
+          </span>
+        </a>
+
+        <div class="sidebar-section">
+          <p class="sidebar-label">Navigation</p>
+          <nav class="sidebar-nav">
+            <a class="nav-item active" href="/dashboard">Control Center</a>
+            <% if (userDashboardUrl) { %>
+              <a class="nav-item" href="<%= userDashboardUrl %>" target="_blank" rel="noreferrer">Public Dashboard</a>
+            <% } %>
+            <a class="nav-item" href="/logout">Log Out</a>
+          </nav>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <h1 class="page-title">MOON ADMIN</h1>
+            <div class="meta">Global control for bot runtime, public dashboard state, and default speech settings.</div>
+          </div>
+          <div class="actions">
+            <button class="theme-toggle" type="button" data-theme-toggle>
+              Theme: <span data-theme-label>Light</span>
+            </button>
+            <% if (userDashboardUrl) { %>
+              <a class="button" href="<%= userDashboardUrl %>" target="_blank" rel="noreferrer">Open Public Dashboard</a>
+            <% } %>
+            <a class="button primary" href="/logout">Log Out</a>
+          </div>
+        </header>
+
+        <% if (typeof saved !== "undefined" && saved) { %>
+          <div class="notice notice-overlay success" data-auto-dismiss>Admin settings saved.</div>
+        <% } %>
+
+        <section class="card admin-summary-card">
+          <div class="card-body stack">
+            <div class="badge-row">
+              <span class="eyebrow">System status</span>
+              <span class="badge <%= settings.globalBotEnabled ? 'live' : '' %>">
+                <%= settings.globalBotEnabled ? 'Bot live' : 'Bot paused' %>
+              </span>
+              <span class="badge <%= settings.userDashboardEnabled ? 'live' : '' %>">
+                <%= settings.userDashboardEnabled ? 'Dashboard live' : 'Dashboard paused' %>
+              </span>
+            </div>
+            <h2 class="section-title section-title-offset">Control room overview</h2>
+            <p class="section-lead">
+              These controls apply globally across the MOON runtime. Use them for provider preference, fallback-ready model settings, and public dashboard availability.
+            </p>
+            <div class="admin-status-grid admin-status-grid-wide">
+              <article class="status-card">
+                <span class="status-label">Groq STT</span>
+                <strong><%= systemStatus.hasGroqStt ? 'Configured' : 'Not configured' %></strong>
+                <span class="meta">Current model: <code><%= systemStatus.currentGroqModel %></code></span>
+              </article>
+              <article class="status-card">
+                <span class="status-label">Deepgram</span>
+                <strong><%= systemStatus.hasDeepgramStt ? 'Configured' : 'Not configured' %></strong>
+                <span class="meta">Prepared model: <code><%= systemStatus.currentDeepgramModel %></code></span>
+              </article>
+              <article class="status-card">
+                <span class="status-label">Local Whisper</span>
+                <strong><%= systemStatus.hasLocalWhisper ? 'Available' : 'Unavailable' %></strong>
+                <span class="meta">Used for self-hosted fallback paths.</span>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-body form-shell">
+            <form method="post" action="/dashboard" class="form-shell" data-settings-form>
+              <input type="hidden" name="csrfToken" value="<%= csrfToken %>" />
+
+              <section class="form-section">
+                <h3 class="section-title">Global switches</h3>
+                <div class="toggle-grid">
+                  <label class="toggle">
+                    <input type="checkbox" name="globalBotEnabled" <%= settings.globalBotEnabled ? "checked" : "" %> />
+                    <span class="toggle-copy">
+                      <span>Enable MOON globally</span>
+                      <small>Immediately pauses or resumes command execution across all guilds.</small>
+                    </span>
+                  </label>
+                  <label class="toggle">
+                    <input type="checkbox" name="userDashboardEnabled" <%= settings.userDashboardEnabled ? "checked" : "" %> />
+                    <span class="toggle-copy">
+                      <span>Enable public dashboard</span>
+                      <small>When off, only MOON ADMIN remains available while the public dashboard shows a paused state.</small>
+                    </span>
+                  </label>
+                </div>
+              </section>
+
+              <section class="form-section">
+                <h3 class="section-title">Speech-to-text runtime</h3>
+                <div class="field-grid">
+                  <label>
+                    Preferred provider
+                    <select name="preferredSttProvider">
+                      <% const providerOptions = systemStatus.hasLocalWhisper ? ['groq', 'local'] : ['groq']; %>
+                      <% providerOptions.forEach((provider) => { %>
+                        <option value="<%= provider %>" <%= settings.preferredSttProvider === provider ? 'selected' : '' %>>
+                          <%= provider === 'groq' ? 'Groq Whisper' : 'Local Whisper' %>
+                        </option>
+                      <% }) %>
+                    </select>
+                    <span class="field-help">Primary provider preference used by the bot runtime.</span>
+                  </label>
+                  <label>
+                    Groq STT model
+                    <input type="text" name="groqSttModel" value="<%= settings.groqSttModel %>" />
+                    <span class="field-help">Example: <code>whisper-large-v3</code>.</span>
+                  </label>
+                </div>
+                <div class="field-grid">
+                  <label>
+                    Deepgram fallback model
+                    <input type="text" name="deepgramSttModel" value="<%= settings.deepgramSttModel %>" />
+                    <span class="field-help">Stored globally so Deepgram fallback can be enabled without changing admin habits later.</span>
+                  </label>
+                </div>
+              </section>
+
+              <section class="form-section">
+                <h3 class="section-title">Default runtime behavior</h3>
+                <div class="toggle-grid">
+                  <label class="toggle">
+                    <input type="checkbox" name="defaultRequireWakeWord" <%= settings.defaultRequireWakeWord ? "checked" : "" %> />
+                    <span class="toggle-copy">
+                      <span>Require wake word by default</span>
+                      <small>New or reset guild profiles inherit this baseline behavior.</small>
+                    </span>
+                  </label>
+                </div>
+                <div class="field-grid">
+                  <label>
+                    Default wake word
+                    <input type="text" name="defaultWakeWord" value="<%= settings.defaultWakeWord %>" />
+                    <span class="field-help">Baseline wake word used for guild-level defaults.</span>
+                  </label>
+                  <label>
+                    Default silence cutoff (ms)
+                    <input type="text" name="defaultTranscriptionSilenceMs" value="<%= settings.defaultTranscriptionSilenceMs %>" />
+                    <span class="field-help">How long MOON waits after silence before transcription starts.</span>
+                  </label>
+                </div>
+                <div class="field-grid">
+                  <label>
+                    Default command cooldown (ms)
+                    <input type="text" name="defaultCommandCooldownMs" value="<%= settings.defaultCommandCooldownMs %>" />
+                    <span class="field-help">Baseline cooldown applied to guild settings and runtime defaults.</span>
+                  </label>
+                </div>
+              </section>
+
+              <section class="form-section">
+                <h3 class="section-title">Control surface links</h3>
+                <div class="quick-grid">
+                  <article class="quick-item">
+                    <strong>Admin URL</strong>
+                    <span class="meta"><code><%= adminAppBaseUrl %></code></span>
+                  </article>
+                  <article class="quick-item">
+                    <strong>Public dashboard</strong>
+                    <span class="meta">
+                      <% if (userDashboardUrl) { %>
+                        <code><%= userDashboardUrl %></code>
+                      <% } else { %>
+                        Set <code>USER_DASHBOARD_URL</code> to surface the public dashboard here.
+                      <% } %>
+                    </span>
+                  </article>
+                </div>
+              </section>
+
+              <div class="save-bar" data-save-bar>
+                <div class="save-bar-copy">
+                  <strong>You have unsaved global changes.</strong>
+                  <span>Save to update the MOON runtime and public dashboard state.</span>
+                </div>
+                <div class="inline-actions">
+                  <button class="button" type="button" data-reset-form>Cancel</button>
+                  <button class="primary" type="submit">Save Changes</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

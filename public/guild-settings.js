@@ -149,7 +149,10 @@
     syncDirtyState();
   }
 
-  window.MOON_GUILD_SETTINGS = {
+  const api = {
     init,
   };
+
+  window.MOON_GUILD_SETTINGS = api;
+  window.MOON_SETTINGS_FORM = api;
 })();

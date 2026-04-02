@@ -99,19 +99,31 @@ function convertPcmToWavBuffer(pcmBuffer) {
   });
 }
 
-async function buildAudioFormData(wavBuffer, model) {
+function resolveTranscriberSettings(overrides = {}) {
+  return {
+    preferredSttProvider: overrides.preferredSttProvider ?? (config.hasGroqStt ? "groq" : "local"),
+    groqSttModel: overrides.groqSttModel ?? config.GROQ_STT_MODEL,
+    whisperLanguage: overrides.whisperLanguage ?? config.WHISPER_LANGUAGE,
+    whisperPrompt: overrides.whisperPrompt ?? config.WHISPER_PROMPT,
+    whisperTemperature: overrides.whisperTemperature ?? config.WHISPER_TEMPERATURE,
+    whisperBeamSize: overrides.whisperBeamSize ?? config.WHISPER_BEAM_SIZE,
+    whisperBestOf: overrides.whisperBestOf ?? config.WHISPER_BEST_OF,
+  };
+}
+
+async function buildAudioFormData(wavBuffer, model, settings) {
   const form = new FormData();
   form.append("file", new Blob([wavBuffer], { type: "audio/wav" }), "command.wav");
   form.append("model", model);
-  form.append("language", config.WHISPER_LANGUAGE);
-  form.append("prompt", config.WHISPER_PROMPT);
-  form.append("temperature", String(config.WHISPER_TEMPERATURE));
+  form.append("language", settings.whisperLanguage);
+  form.append("prompt", settings.whisperPrompt);
+  form.append("temperature", String(settings.whisperTemperature));
   form.append("response_format", "text");
   return form;
 }
 
-async function transcribeViaHttpEndpoint(url, wavBuffer, options = {}) {
-  const form = await buildAudioFormData(wavBuffer, options.model);
+async function transcribeViaHttpEndpoint(url, wavBuffer, settings, options = {}) {
+  const form = await buildAudioFormData(wavBuffer, options.model, settings);
   const response = await fetch(url, {
     method: "POST",
     headers: options.headers,
@@ -126,22 +138,22 @@ async function transcribeViaHttpEndpoint(url, wavBuffer, options = {}) {
   return body.trim();
 }
 
-async function transcribeViaGroq(wavBuffer) {
-  return transcribeViaHttpEndpoint(config.GROQ_STT_URL, wavBuffer, {
-    model: config.GROQ_STT_MODEL,
+async function transcribeViaGroq(wavBuffer, settings) {
+  return transcribeViaHttpEndpoint(config.GROQ_STT_URL, wavBuffer, settings, {
+    model: settings.groqSttModel,
     headers: {
       Authorization: `Bearer ${config.GROQ_API_KEY}`,
     },
   });
 }
 
-async function transcribeViaServer(wavBuffer) {
-  return transcribeViaHttpEndpoint(config.whisperServerUrl, wavBuffer, {
+async function transcribeViaServer(wavBuffer, settings) {
+  return transcribeViaHttpEndpoint(config.whisperServerUrl, wavBuffer, settings, {
     model: "whisper-1",
   });
 }
 
-async function runWhisperCpp(wavBuffer, outputBasePath) {
+async function runWhisperCpp(wavBuffer, outputBasePath, settings) {
   const wavPath = `${outputBasePath}.wav`;
   await fs.writeFile(wavPath, wavBuffer);
 
@@ -151,15 +163,15 @@ async function runWhisperCpp(wavBuffer, outputBasePath) {
     "-f",
     wavPath,
     "-l",
-    config.WHISPER_LANGUAGE,
+    settings.whisperLanguage,
     "-bs",
-    String(config.WHISPER_BEAM_SIZE),
+    String(settings.whisperBeamSize),
     "-bo",
-    String(config.WHISPER_BEST_OF),
+    String(settings.whisperBestOf),
     "-tp",
-    String(config.WHISPER_TEMPERATURE),
+    String(settings.whisperTemperature),
     "--prompt",
-    config.WHISPER_PROMPT,
+    settings.whisperPrompt,
     "-nt",
     "-otxt",
     "-of",
@@ -183,17 +195,18 @@ async function cleanupTranscriptionFiles(outputBasePath) {
   ]);
 }
 
-async function transcribePcmBuffer(pcmBuffer) {
+async function transcribePcmBuffer(pcmBuffer, overrides = {}) {
   await fs.mkdir(config.TEMP_DIR, { recursive: true });
 
   const jobId = randomUUID();
   const outputBasePath = path.join(config.TEMP_DIR, `${jobId}`);
   const wavBuffer = await convertPcmToWavBuffer(pcmBuffer);
+  const settings = resolveTranscriberSettings(overrides);
 
   try {
-    if (config.hasGroqStt) {
+    if (settings.preferredSttProvider === "groq" && config.hasGroqStt) {
       try {
-        return await transcribeViaGroq(wavBuffer);
+        return await transcribeViaGroq(wavBuffer, settings);
       } catch (error) {
         console.warn("[MOON] Groq transcription failed, falling back.", error?.details ?? error);
       }
@@ -201,14 +214,18 @@ async function transcribePcmBuffer(pcmBuffer) {
 
     if (isWhisperServerReady()) {
       try {
-        return await transcribeViaServer(wavBuffer);
+        return await transcribeViaServer(wavBuffer, settings);
       } catch (error) {
         console.warn("[MOON] Whisper server request failed, falling back to CLI.", error?.details ?? error);
       }
     }
 
     if (config.hasLocalWhisper) {
-      return await runWhisperCpp(wavBuffer, outputBasePath);
+      return await runWhisperCpp(wavBuffer, outputBasePath, settings);
+    }
+
+    if (config.hasGroqStt) {
+      return await transcribeViaGroq(wavBuffer, settings);
     }
 
     throw createTranscriptionError(

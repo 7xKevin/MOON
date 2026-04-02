@@ -137,6 +137,10 @@ function requireAuth(req, res, next) {
   next();
 }
 
+function isSuperAdmin(config, user) {
+  return Boolean(user && config.DASHBOARD_SUPER_ADMIN_IDS.includes(user.id));
+}
+
 function parseBoolean(value) {
   return value === "on" || value === "true" || value === true;
 }
@@ -314,6 +318,32 @@ function createWebApp({ config, store }) {
     res.locals.botInviteUrl = buildBotInviteUrl(config);
     res.locals.csrfToken = ensureCsrfToken(req);
     next();
+  });
+
+  app.use(async (req, res, next) => {
+    if (req.path === "/healthz" || req.path.startsWith("/auth/") || req.path === "/login" || req.path === "/logout") {
+      next();
+      return;
+    }
+
+    if (typeof store.getGlobalAdminSettings !== "function") {
+      next();
+      return;
+    }
+
+    const globalAdminSettings = await store.getGlobalAdminSettings();
+    res.locals.globalAdminSettings = globalAdminSettings;
+
+    if (globalAdminSettings.userDashboardEnabled || isSuperAdmin(config, req.session?.user)) {
+      next();
+      return;
+    }
+
+    res.status(503).render("home", {
+      title: "MOON Control",
+      loggedIn: Boolean(req.session.user),
+      error: "The public MOON dashboard is temporarily paused by MOON ADMIN.",
+    });
   });
 
   app.get("/healthz", (req, res) => {

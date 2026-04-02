@@ -56,7 +56,8 @@ a {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -355,6 +356,61 @@ html[data-theme="dark"] button:hover {
 
 .landing-page .sidebar {
   padding-block: 14px;
+}
+
+.admin-page .sidebar {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, var(--bg-subtle)) 0%, var(--bg-subtle) 100%);
+}
+
+.admin-page .brand-copy strong {
+  letter-spacing: 0.03em;
+}
+
+.admin-headline {
+  max-width: 18ch;
+}
+
+.admin-highlight-row {
+  margin-top: 8px;
+}
+
+.admin-side-card .card-body {
+  justify-content: center;
+}
+
+.admin-summary-card {
+  margin-bottom: 18px;
+}
+
+.admin-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.admin-status-grid-wide {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.status-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-subtle);
+}
+
+.status-card strong {
+  font-size: 1rem;
+}
+
+.status-label {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .landing-page .layout {
@@ -704,13 +760,18 @@ label {
 }
 
 input[type="text"],
-textarea {
+textarea,
+select {
   width: 100%;
   padding: 11px 12px;
   border-radius: 8px;
   border: 1px solid var(--line);
   background: var(--bg-input);
   color: var(--text);
+}
+
+select {
+  appearance: none;
 }
 
 textarea {
@@ -754,6 +815,10 @@ textarea {
   margin-top: 18px;
   color: var(--text-muted);
   font-size: 0.92rem;
+}
+
+.section-title-offset {
+  margin-top: 10px;
 }
 
 @media (max-width: 900px) {

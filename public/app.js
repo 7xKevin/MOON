@@ -119,6 +119,7 @@
   function runPageInitializers() {
     window.MOON_THEME?.init?.();
     window.MOON_GUILD_SETTINGS?.init?.();
+    window.MOON_SETTINGS_FORM?.init?.();
   }
 
   function markPageReady() {
