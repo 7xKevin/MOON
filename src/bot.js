@@ -7,7 +7,7 @@ const {
   joinVoiceChannel,
 } = require("@discordjs/voice");
 const prism = require("prism-media");
-const { getVoiceCommandGuide, parseVoiceCommand } = require("./commandParser");
+const { buildWakeWordCandidates, getVoiceCommandGuide, normalizeText, parseVoiceCommand } = require("./commandParser");
 const { transcribePcmBuffer } = require("./transcriber");
 const {
   findRoleByName,
@@ -61,6 +61,70 @@ function createBot({ config, store }) {
     }
 
     return fallback;
+  }
+
+  function collectTranscriptionKeyterms(guild, runtimeVoiceSettings) {
+    const terms = new Set();
+    const addTerm = (value) => {
+      const normalized = normalizeText(value);
+      if (!normalized || normalized.length < 2) {
+        return;
+      }
+
+      terms.add(normalized);
+    };
+
+    buildWakeWordCandidates(runtimeVoiceSettings.wakeWord).forEach(addTerm);
+    [
+      "lock vc",
+      "unlock vc",
+      "mute me",
+      "mute",
+      "unmute",
+      "disconnect me",
+      "disconnect all",
+      "drag me",
+      "drag all",
+      "role add",
+      "role remove",
+      "say in",
+      "mention",
+      "spam",
+      "stop spam",
+      "voice channel",
+      "general",
+      "admin room",
+      "live room",
+      "waiting room",
+      "rff area",
+    ].forEach(addTerm);
+
+    const members = Array.from(guild.members.cache.values()).slice(0, 40);
+    for (const member of members) {
+      addTerm(member.displayName);
+      addTerm(member.user.username);
+    }
+
+    const channels = Array.from(guild.channels.cache.values()).slice(0, 40);
+    for (const channel of channels) {
+      addTerm(channel.name);
+      addTerm(channel.name.replace(/-/g, " "));
+    }
+
+    return Array.from(terms).slice(0, 48);
+  }
+
+  function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
+    const wakeAliases = buildWakeWordCandidates(runtimeVoiceSettings.wakeWord).join(", ");
+    const hintedTerms = keyterms.slice(0, 18).join(", ");
+    return [
+      `Transcribe short Discord voice commands. Preferred wake word: ${runtimeVoiceSettings.wakeWord}.`,
+      `Common wake word variants: ${wakeAliases}.`,
+      "Keep command words literal: lock vc, unlock vc, mute, unmute, disconnect, drag, role add, role remove, say, mention, spam, stop spam.",
+      hintedTerms ? `Important names and channels: ${hintedTerms}.` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
   }
 
   function getSession(guildId) {
@@ -803,6 +867,7 @@ function createBot({ config, store }) {
       return;
     }
 
+    const keyterms = collectTranscriptionKeyterms(guild, session.runtimeVoiceSettings);
     const transcript = await transcribePcmBuffer(pcmBuffer, {
       preferredSttProvider: globalAdminSettings?.preferredSttProvider,
       groqEnabled: globalAdminSettings?.groqEnabled,
@@ -812,6 +877,8 @@ function createBot({ config, store }) {
       groqSttModel: globalAdminSettings?.groqSttModel,
       deepgramSttModel: globalAdminSettings?.deepgramSttModel,
       assemblyAiSttModel: globalAdminSettings?.assemblyAiSttModel,
+      whisperPrompt: buildTranscriptionPrompt(session.runtimeVoiceSettings, keyterms),
+      keyterms,
     });
     if (!transcript || isIgnorableTranscript(transcript)) {
       return;

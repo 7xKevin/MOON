@@ -237,6 +237,17 @@ function stripWakeWordPrefix(normalized, wakeWord, requireWakeWord) {
   return requireWakeWord ? null : cleanCommandText(normalized);
 }
 
+function looksLikeDirectCommand(input) {
+  const tokens = cleanCommandText(input).split(' ').filter(Boolean);
+  if (!tokens.length) {
+    return false;
+  }
+
+  return Boolean(
+    bestKeywordMatch(tokens[0], ['lock', 'unlock', 'mute', 'unmute', 'disconnect', 'drag', 'role', 'say', 'mention', 'ping', 'spam', 'stop'], 0.84)
+  );
+}
+
 function parseNameList(segment) {
   const normalized = cleanCommandText(segment);
   if (!normalized) {
@@ -579,7 +590,11 @@ function parseVoiceCommand(transcript, options = {}) {
     return null;
   }
 
-  const commandText = stripWakeWordPrefix(normalized, options.wakeWord ?? 'moon', options.requireWakeWord ?? true);
+  let commandText = stripWakeWordPrefix(normalized, options.wakeWord ?? 'moon', options.requireWakeWord ?? true);
+  if (!commandText && (options.requireWakeWord ?? true) && looksLikeDirectCommand(normalized)) {
+    commandText = cleanCommandText(normalized);
+  }
+
   if (!commandText) {
     return null;
   }
@@ -612,10 +627,12 @@ function getVoiceCommandGuide(runtimeVoiceSettings) {
 }
 
 module.exports = {
+  buildWakeWordCandidates,
   cleanCommandText,
   compactText,
   getGlobalVoiceCommandCatalog,
   getVoiceCommandGuide,
+  looksLikeDirectCommand,
   normalizeText,
   parseVoiceCommand,
   phoneticKey,

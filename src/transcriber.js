@@ -116,6 +116,7 @@ function resolveTranscriberSettings(overrides = {}) {
     whisperTemperature: overrides.whisperTemperature ?? config.WHISPER_TEMPERATURE,
     whisperBeamSize: overrides.whisperBeamSize ?? config.WHISPER_BEAM_SIZE,
     whisperBestOf: overrides.whisperBestOf ?? config.WHISPER_BEST_OF,
+    keyterms: Array.isArray(overrides.keyterms) ? overrides.keyterms.filter(Boolean).slice(0, 64) : [],
   };
 }
 
@@ -161,6 +162,9 @@ async function transcribeViaDeepgram(wavBuffer, settings) {
   url.searchParams.set("smart_format", "true");
   url.searchParams.set("punctuate", "true");
   url.searchParams.set("language", settings.whisperLanguage);
+  for (const keyterm of settings.keyterms) {
+    url.searchParams.append("keyterm", keyterm);
+  }
 
   const response = await fetch(url, {
     method: "POST",
@@ -201,22 +205,29 @@ async function uploadToAssemblyAi(wavBuffer) {
 
 async function transcribeViaAssemblyAi(wavBuffer, settings) {
   const uploadUrl = await uploadToAssemblyAi(wavBuffer);
+  const transcriptRequest = {
+    audio_url: uploadUrl,
+    speech_models: [settings.assemblyAiSttModel],
+    ...(settings.whisperLanguage === "auto"
+      ? {
+          language_detection: true,
+        }
+      : {
+          language_code: settings.whisperLanguage,
+        }),
+  };
+
+  if (settings.keyterms.length) {
+    transcriptRequest.keyterms_prompt = settings.keyterms;
+  }
+
   const response = await fetch(`${config.ASSEMBLYAI_API_URL}/v2/transcript`, {
     method: "POST",
     headers: {
       Authorization: config.ASSEMBLYAI_API_KEY,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      audio_url: uploadUrl,
-      speech_models: [settings.assemblyAiSttModel],
-      language_detection: settings.whisperLanguage === "auto",
-      ...(settings.whisperLanguage === "auto"
-        ? {}
-        : {
-            language_code: settings.whisperLanguage,
-          }),
-    }),
+    body: JSON.stringify(transcriptRequest),
   });
 
   const body = await response.text();
