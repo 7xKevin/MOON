@@ -512,6 +512,37 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
     });
   }
 
+  function getBotCallCommand(member) {
+    const names = [member?.displayName, member?.user?.globalName, member?.user?.username]
+      .map((value) => String(value ?? "").trim().toLowerCase())
+      .filter(Boolean);
+
+    if (names.some((name) => name.includes("rythm"))) {
+      return "!summon";
+    }
+
+    if (names.some((name) => name.includes("fredboat"))) {
+      return ";;join";
+    }
+
+    return null;
+  }
+
+  async function resolveTextChannelForCall(guild, session, channelName) {
+    if (channelName) {
+      return resolveTextChannel(guild, channelName);
+    }
+
+    const fallbackChannel =
+      guild.channels.cache.get(session.textChannelId) ?? (await guild.channels.fetch(session.textChannelId).catch(() => null));
+    return {
+      channel: fallbackChannel && fallbackChannel.isTextBased?.() ? fallbackChannel : null,
+      score: fallbackChannel ? 1 : 0,
+      ambiguous: false,
+      secondChannel: null,
+    };
+  }
+
   async function executeVoiceCommand(guild, session, command, transcript, guildSettings, controller, speaker) {
     const controllerChannel = controller.voice.channel;
 
