@@ -7,7 +7,7 @@ const {
   joinVoiceChannel,
 } = require("@discordjs/voice");
 const prism = require("prism-media");
-const { buildWakeWordCandidates, getVoiceCommandGuide, normalizeText, parseVoiceCommand } = require("./commandParser");
+const { buildWakeWordCandidates, getGlobalVoiceCommandCatalog, getVoiceCommandGuide, normalizeText, parseVoiceCommand } = require("./commandParser");
 const { transcribePcmBuffer } = require("./transcriber");
 const {
   findRoleByName,
@@ -76,15 +76,52 @@ function createBot({ config, store }) {
     }
   }
 
-  function collectTranscriptionKeyterms(guild, runtimeVoiceSettings) {
+  function replaceDigitsWithWords(input) {
+    return String(input ?? "")
+      .replace(/\b0\b/g, "zero")
+      .replace(/\b1\b/g, "one")
+      .replace(/\b2\b/g, "two")
+      .replace(/\b3\b/g, "three")
+      .replace(/\b4\b/g, "four")
+      .replace(/\b5\b/g, "five")
+      .replace(/\b6\b/g, "six")
+      .replace(/\b7\b/g, "seven")
+      .replace(/\b8\b/g, "eight")
+      .replace(/\b9\b/g, "nine")
+      .replace(/\b10\b/g, "ten");
+  }
+
+  function buildKeytermVariants(value) {
+    const source = String(value ?? "").trim();
+    if (!source) {
+      return [];
+    }
+
+    const variants = new Set();
+    const pushVariant = (candidate) => {
+      const normalized = normalizeText(candidate);
+      if (normalized.length >= 2) {
+        variants.add(normalized);
+      }
+    };
+
+    pushVariant(source);
+    pushVariant(source.replace(/-/g, " "));
+    pushVariant(source.replace(/&/g, " and "));
+    pushVariant(source.replace(/\bvc\b/gi, "v c"));
+    pushVariant(source.replace(/\bvoice channel\b/gi, "vc"));
+    pushVariant(replaceDigitsWithWords(source));
+    pushVariant(replaceDigitsWithWords(source.replace(/-/g, " ")));
+
+    return Array.from(variants);
+  }
+
+  function collectTranscriptionKeyterms(guild, runtimeVoiceSettings, controller = null, speaker = null) {
     const terms = new Set();
     const addTerm = (value) => {
-      const normalized = normalizeText(value);
-      if (!normalized || normalized.length < 2) {
-        return;
+      for (const variant of buildKeytermVariants(value)) {
+        terms.add(variant);
       }
-
-      terms.add(normalized);
     };
 
     buildWakeWordCandidates(runtimeVoiceSettings.wakeWord).forEach(addTerm);
@@ -96,14 +133,25 @@ function createBot({ config, store }) {
       "unmute",
       "disconnect me",
       "disconnect all",
+      "kick",
       "drag me",
       "drag all",
+      "move me",
+      "move all",
+      "bring me",
       "role add",
       "role remove",
+      "give role",
+      "remove role",
       "say in",
+      "send in",
       "mention",
+      "ping",
       "spam",
       "stop spam",
+      "play",
+      "play sound",
+      "soundboard",
       "voice channel",
       "general",
       "admin room",
@@ -112,27 +160,48 @@ function createBot({ config, store }) {
       "rff area",
     ].forEach(addTerm);
 
-    const members = Array.from(guild.members.cache.values()).slice(0, 40);
-    for (const member of members) {
-      addTerm(member.displayName);
-      addTerm(member.user.username);
+    for (const command of getGlobalVoiceCommandCatalog()) {
+      addTerm(command.syntax.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim());
     }
 
-    const soundboardSounds = Array.from(guild.soundboardSounds?.cache?.values?.() ?? []).slice(0, 25);
+    const prioritizedMembers = new Map();
+    for (const member of controller?.voice?.channel?.members?.values?.() ?? []) {
+      prioritizedMembers.set(member.id, member);
+    }
+    if (speaker) {
+      prioritizedMembers.set(speaker.id, speaker);
+    }
+    for (const member of Array.from(guild.members.cache.values()).slice(0, 40)) {
+      if (!prioritizedMembers.has(member.id) && prioritizedMembers.size < 40) {
+        prioritizedMembers.set(member.id, member);
+      }
+    }
+
+    for (const member of prioritizedMembers.values()) {
+      addTerm(member.displayName);
+      addTerm(member.user.username);
+      addTerm(member.nickname);
+      addTerm(member.user.globalName);
+    }
+
+    const soundboardSounds = Array.from(guild.soundboardSounds?.cache?.values?.() ?? []).slice(0, 32);
     for (const sound of soundboardSounds) {
       addTerm(sound.name);
     }
 
-    const channels = Array.from(guild.channels.cache.values()).slice(0, 40);
+    const channels = Array.from(guild.channels.cache.values()).slice(0, 48);
     for (const channel of channels) {
       addTerm(channel.name);
-      addTerm(channel.name.replace(/-/g, " "));
     }
 
-    return Array.from(terms).slice(0, 48);
-  }
+    const roles = Array.from(guild.roles.cache.values()).filter((role) => role.id !== guild.id).slice(0, 32);
+    for (const role of roles) {
+      addTerm(role.name);
+    }
 
-  function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
+    return Array.from(terms).slice(0, 64);
+  }
+function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
     const wakeAliases = buildWakeWordCandidates(runtimeVoiceSettings.wakeWord).join(", ");
     const hintedTerms = keyterms.slice(0, 18).join(", ");
     return [
@@ -966,7 +1035,7 @@ function createBot({ config, store }) {
       return;
     }
 
-    const keyterms = collectTranscriptionKeyterms(guild, session.runtimeVoiceSettings);
+    const keyterms = collectTranscriptionKeyterms(guild, session.runtimeVoiceSettings, controller, speaker);
     const transcription = await transcribePcmBuffer(pcmBuffer, {
       preferredSttProvider: globalAdminSettings?.preferredSttProvider,
       groqEnabled: globalAdminSettings?.groqEnabled,
