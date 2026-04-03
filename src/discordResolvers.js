@@ -160,7 +160,7 @@ async function findMemberByName(guild, rawName) {
   }
 
   const [best, second] = ranked;
-  if (!best || best.score < 0.76) {
+  if (!best || best.score < 0.72) {
     return {
       member: null,
       score: best?.score ?? -1,
@@ -195,6 +195,7 @@ function normalizeSpokenNumbers(input) {
 
 function normalizeChannelLookup(input) {
   return normalizeSpokenNumbers(normalizeText(input))
+    .replace(/\bvee\s+see\b/g, "vc")
     .replace(/\b([vb])\s+([cb])\b/g, "$1$2")
     .replace(/\b(?:voice|vc|bc|room|channel|call)\b/g, " ")
     .replace(/\s+/g, " ")
@@ -306,14 +307,14 @@ async function findVoiceChannelByName(guild, rawName) {
     }
   }
 
-  if (!best || best.score < 0.76) {
+  if (!best || best.score < 0.72) {
     return { channel: null, score: best?.score ?? -1, ambiguous: false, secondChannel: second?.channel ?? null };
   }
 
   return {
     channel: best.channel,
     score: best.score,
-    ambiguous: Boolean(second && best.score - second.score < 0.05),
+    ambiguous: Boolean(second && best.score - second.score < 0.035),
     secondChannel: second?.channel ?? null,
   };
 }
@@ -354,14 +355,14 @@ async function findTextChannelByName(guild, rawName) {
     }
   }
 
-  if (!best || best.score < 0.76) {
+  if (!best || best.score < 0.72) {
     return { channel: null, score: best?.score ?? -1, ambiguous: false, secondChannel: second?.channel ?? null };
   }
 
   return {
     channel: best.channel,
     score: best.score,
-    ambiguous: Boolean(second && best.score - second.score < 0.05),
+    ambiguous: Boolean(second && best.score - second.score < 0.035),
     secondChannel: second?.channel ?? null,
   };
 }
@@ -436,14 +437,14 @@ async function findRoleByName(guild, rawName) {
     }
   }
 
-  if (!best || best.score < 0.76) {
+  if (!best || best.score < 0.72) {
     return { role: null, score: best?.score ?? -1, ambiguous: false, secondRole: second?.role ?? null };
   }
 
   return {
     role: best.role,
     score: best.score,
-    ambiguous: Boolean(second && best.score - second.score < 0.05),
+    ambiguous: Boolean(second && best.score - second.score < 0.035),
     secondRole: second?.role ?? null,
   };
 }

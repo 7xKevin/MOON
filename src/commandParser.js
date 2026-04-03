@@ -179,6 +179,28 @@ function cleanCommandText(input) {
   return stripPhrases(stripPhrases(normalizeText(input), leadingPhrases, true), trailingPhrases, false);
 }
 
+function canonicalizeCommandText(input) {
+  return cleanCommandText(input)
+    .replace(/\btext to\b/g, 'text')
+    .replace(/\b(?:voice chat|voice channel)\b/g, 'vc')
+    .replace(/\bv\s*c\b/g, 'vc')
+    .replace(/\binto\b/g, 'to')
+    .replace(/\bonto\b/g, 'to')
+    .replace(/\bon to\b/g, 'to')
+    .replace(/\bmessage me?\b/g, 'say')
+    .replace(/\bsend\b/g, 'say')
+    .replace(/\bpost\b/g, 'say')
+    .replace(/\bwrite\b/g, 'say')
+    .replace(/\bping\b/g, 'mention')
+    .replace(/\btag\b/g, 'mention')
+    .replace(/\bmove\b/g, 'drag')
+    .replace(/\bbring\b/g, 'drag')
+    .replace(/\bpull\b/g, 'drag')
+    .replace(/\btake\b/g, 'drag')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function buildWakeWordCandidates(wakeWord) {
   const normalizedWakeWord = normalizeText(wakeWord);
   const compactWakeWord = compactText(normalizedWakeWord);
@@ -189,7 +211,7 @@ function buildWakeWordCandidates(wakeWord) {
   }
 
   if (compactWakeWord === 'moon') {
-    ['mune', 'mon', 'moone'].forEach((variant) => candidates.add(variant));
+    ['mune', 'mon', 'moone', 'micro', 'miko', 'mino'].forEach((variant) => candidates.add(variant));
   }
 
   return Array.from(candidates).filter(Boolean);
@@ -244,7 +266,7 @@ function looksLikeDirectCommand(input) {
   }
 
   return Boolean(
-    bestKeywordMatch(tokens[0], ['lock', 'unlock', 'mute', 'unmute', 'disconnect', 'drag', 'role', 'say', 'mention', 'ping', 'spam', 'stop'], 0.84)
+    bestKeywordMatch(tokens[0], ['lock', 'unlock', 'mute', 'unmute', 'disconnect', 'kick', 'drag', 'move', 'bring', 'pull', 'role', 'give', 'assign', 'remove', 'say', 'send', 'message', 'mention', 'ping', 'tag', 'spam', 'stop'], 0.82)
   );
 }
 
@@ -402,9 +424,12 @@ function detectAction(tokens, actionWords, threshold = 0.72) {
 function parseTargetActionCommand(tokens, commandText, rawTranscript) {
   const action = detectAction(tokens, [
     { type: 'mute', word: 'mute' },
+    { type: 'mute', word: 'silence' },
     { type: 'unmute', word: 'unmute' },
+    { type: 'unmute', word: 'unsilence' },
     { type: 'kick', word: 'disconnect' },
     { type: 'kick', word: 'kick' },
+    { type: 'kick', word: 'remove' },
   ]);
 
   if (!action) {
@@ -425,7 +450,13 @@ function parseTargetActionCommand(tokens, commandText, rawTranscript) {
 }
 
 function parseDragCommand(tokens, commandText, rawTranscript) {
-  const dragAction = detectAction(tokens, [{ type: 'drag', word: 'drag' }], 0.62);
+  const dragAction = detectAction(tokens, [
+    { type: 'drag', word: 'drag' },
+    { type: 'drag', word: 'move' },
+    { type: 'drag', word: 'bring' },
+    { type: 'drag', word: 'pull' },
+    { type: 'drag', word: 'take' },
+  ], 0.6);
   if (!dragAction) {
     return null;
   }
@@ -480,32 +511,60 @@ function parseDragCommand(tokens, commandText, rawTranscript) {
 
 function parseRoleCommand(tokens, commandText, rawTranscript) {
   const roleHead = bestKeywordMatch(tokens[0], ['role'], 0.72);
-  if (!roleHead) {
-    return null;
+  if (roleHead) {
+    const action = detectAction(tokens.slice(1), [
+      { type: 'role-add', word: 'add' },
+      { type: 'role-remove', word: 'remove' },
+    ], 0.72);
+
+    if (!action) {
+      return null;
+    }
+
+    const remainder = cleanCommandText(tokens.slice(2).join(' '));
+    const match = remainder.match(/^(.*?) role (.+)$/);
+    if (!match) {
+      return null;
+    }
+
+    const targetSpec = parseTargetToken(match[1]);
+    const roleName = cleanCommandText(match[2]);
+    if (!targetSpec || targetSpec.kind === 'channel' || !roleName) {
+      return null;
+    }
+
+    return buildRoleCommand(action.type, targetSpec, roleName, commandText, rawTranscript, average([roleHead.score, action.score]));
   }
 
-  const action = detectAction(tokens.slice(1), [
-    { type: 'role-add', word: 'add' },
-    { type: 'role-remove', word: 'remove' },
-  ], 0.72);
-
-  if (!action) {
-    return null;
+  const normalized = cleanCommandText(commandText);
+  const giveMatch = normalized.match(/^(?:give|assign|add)\s+(.+?)\s+(?:the\s+)?role\s+(.+)$/);
+  if (giveMatch) {
+    const targetSpec = parseTargetToken(giveMatch[1]);
+    const roleName = cleanCommandText(giveMatch[2]);
+    if (targetSpec && targetSpec.kind !== 'channel' && roleName) {
+      return buildRoleCommand('role-add', targetSpec, roleName, commandText, rawTranscript, 0.8);
+    }
   }
 
-  const remainder = cleanCommandText(tokens.slice(2).join(' '));
-  const match = remainder.match(/^(.*?) role (.+)$/);
-  if (!match) {
-    return null;
+  const giveLooseMatch = normalized.match(/^(?:give|assign|add)\s+(.+?)\s+(.+?)\s+role$/);
+  if (giveLooseMatch) {
+    const targetSpec = parseTargetToken(giveLooseMatch[1]);
+    const roleName = cleanCommandText(giveLooseMatch[2]);
+    if (targetSpec && targetSpec.kind !== 'channel' && roleName) {
+      return buildRoleCommand('role-add', targetSpec, roleName, commandText, rawTranscript, 0.78);
+    }
   }
 
-  const targetSpec = parseTargetToken(match[1]);
-  const roleName = cleanCommandText(match[2]);
-  if (!targetSpec || targetSpec.kind === 'channel' || !roleName) {
-    return null;
+  const removeMatch = normalized.match(/^(?:remove|take)\s+(.+?)\s+role\s+from\s+(.+)$/);
+  if (removeMatch) {
+    const roleName = cleanCommandText(removeMatch[1]);
+    const targetSpec = parseTargetToken(removeMatch[2]);
+    if (targetSpec && targetSpec.kind !== 'channel' && roleName) {
+      return buildRoleCommand('role-remove', targetSpec, roleName, commandText, rawTranscript, 0.8);
+    }
   }
 
-  return buildRoleCommand(action.type, targetSpec, roleName, commandText, rawTranscript, average([roleHead.score, action.score]));
+  return null;
 }
 
 function parseTextCommand(tokens, commandText, rawTranscript) {
@@ -518,11 +577,18 @@ function parseTextCommand(tokens, commandText, rawTranscript) {
     return buildTextCommand('spam-stop', commandText, rawTranscript, average([stopMatch.score, 1]));
   }
 
-  const sayMatch = detectAction(tokens, [{ type: 'say', word: 'say' }], 0.72);
+  const sayMatch = detectAction(tokens, [{ type: 'say', word: 'say' }], 0.68);
   if (sayMatch) {
     const remainder = cleanCommandText(tokens.slice(1).join(' '));
-    const match = remainder.match(/^in (.+?) text (.+)$/);
+    let match = remainder.match(/^in (.+?) text (.+)$/);
     if (!match) {
+      match = remainder.match(/^(.+?) in (.+)$/);
+      if (match) {
+        return buildTextCommand('say', commandText, rawTranscript, sayMatch.score, {
+          message: String(match[1] ?? '').trim(),
+          channelName: cleanCommandText(match[2]),
+        });
+      }
       return null;
     }
 
@@ -538,10 +604,10 @@ function parseTextCommand(tokens, commandText, rawTranscript) {
     });
   }
 
-  const mentionMatch = detectAction(tokens, [{ type: 'mention', word: 'mention' }, { type: 'mention', word: 'ping' }], 0.72);
+  const mentionMatch = detectAction(tokens, [{ type: 'mention', word: 'mention' }, { type: 'mention', word: 'ping' }], 0.68);
   if (mentionMatch) {
     const remainder = cleanCommandText(tokens.slice(1).join(' '));
-    const match = remainder.match(/^(.*?) in (.+)$/);
+    const match = remainder.match(/^(.*?) (?:in|on) (.+)$/);
     if (!match) {
       return null;
     }
@@ -563,11 +629,18 @@ function parseTextCommand(tokens, commandText, rawTranscript) {
     });
   }
 
-  const spamMatch = detectAction(tokens, [{ type: 'spam', word: 'spam' }], 0.72);
+  const spamMatch = detectAction(tokens, [{ type: 'spam', word: 'spam' }], 0.68);
   if (spamMatch) {
     const remainder = cleanCommandText(tokens.slice(1).join(' '));
-    const match = remainder.match(/^in (.+?) text (.+)$/);
+    let match = remainder.match(/^in (.+?) text (.+)$/);
     if (!match) {
+      match = remainder.match(/^(.+?) in (.+)$/);
+      if (match) {
+        return buildTextCommand('spam', commandText, rawTranscript, spamMatch.score, {
+          message: String(match[1] ?? '').trim(),
+          channelName: cleanCommandText(match[2]),
+        });
+      }
       return null;
     }
 
@@ -600,6 +673,8 @@ function parseVoiceCommand(transcript, options = {}) {
   if (!commandText) {
     return null;
   }
+
+  commandText = canonicalizeCommandText(commandText);
 
   const tokens = commandText.split(' ').filter(Boolean);
   if (!tokens.length) {

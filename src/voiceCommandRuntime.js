@@ -45,30 +45,30 @@ function isIgnorableTranscript(transcript) {
 
 function getCommandConfidenceFloor(commandType) {
   if (commandType === "kick" || commandType === "drag") {
-    return 0.82;
+    return 0.72;
   }
 
   if (commandType === "role-add" || commandType === "role-remove") {
-    return 0.8;
+    return 0.72;
   }
 
   if (commandType === "mute" || commandType === "unmute") {
-    return 0.76;
+    return 0.72;
   }
 
-  return 0.74;
+  return 0.68;
 }
 
 function getTargetConfidenceFloor(commandType) {
   if (commandType === "kick" || commandType === "drag") {
-    return 0.84;
+    return 0.76;
   }
 
   if (commandType === "role-add" || commandType === "role-remove") {
-    return 0.8;
+    return 0.72;
   }
 
-  return 0.78;
+  return 0.72;
 }
 
 function getRuntimeVoiceSettings(guildSettings, config) {
