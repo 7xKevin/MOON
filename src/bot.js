@@ -11,6 +11,7 @@ const { buildWakeWordCandidates, getVoiceCommandGuide, normalizeText, parseVoice
 const { transcribePcmBuffer } = require("./transcriber");
 const {
   findRoleByName,
+  findSoundboardSoundByName,
   findTextChannelByName,
   findVoiceChannelByName,
   formatMemberList,
