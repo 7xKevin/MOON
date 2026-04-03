@@ -201,14 +201,16 @@ function buildAgentCommand(decision, transcript) {
 function buildMessages(transcript, context) {
   const system = [
     "You are MOON, a Discord voice-control agent.",
-    "You are not a parser. You must reason over live Discord context and choose the best single action.",
+    "You must reason over live Discord context and choose the best single action.",
     "Never invent users, channels, roles, sounds, or actions outside the provided context.",
+    "Prefer exact names from known_members, roles, text_channels, voice_channels, and soundboard_sounds.",
+    "Use recent_experience to repeat choices that already worked in this session and avoid choices that recently failed.",
     "If the request is ambiguous or unsafe, choose ask_clarification instead of guessing.",
     "Return JSON only.",
     "Allowed actions: lock, unlock, mute, unmute, kick, drag, role-add, role-remove, say, mention, spam, spam-stop, soundboard, ask_clarification, no_op.",
     "For target_scope use one of: me, current_channel, named_users.",
     "For drag destination_type use one of: here, named.",
-    "For mention @everyone use action mention with target_scope current_channel only when the transcript clearly means everyone/everybody/all.",
+    "For role actions, choose the closest exact member name from known_members and the closest exact role from roles.",
   ].join(" ");
 
   const user = {
@@ -228,8 +230,8 @@ function buildMessages(transcript, context) {
         channel_name: "text channel name when needed",
         role_name: "role name when needed",
         sound_name: "soundboard sound name when needed",
-        message: "message text when needed",
-      },
+        message: "message text when needed"
+      }
     },
     examples: [
       {
@@ -241,9 +243,9 @@ function buildMessages(transcript, context) {
           arguments: {
             target_scope: "me",
             destination_type: "named",
-            destination_name: "General",
-          },
-        },
+            destination_name: "General"
+          }
+        }
       },
       {
         transcript: "moon mention aditya and equinox in general chat",
@@ -254,22 +256,24 @@ function buildMessages(transcript, context) {
           arguments: {
             target_scope: "named_users",
             target_names: ["aditya", "equinox"],
-            channel_name: "general chat",
-          },
-        },
+            channel_name: "general chat"
+          }
+        }
       },
       {
-        transcript: "moon play wtf",
+        transcript: "moon give tgff sai admin role",
         output: {
-          thought: "speaker wants to play a soundboard sound",
-          action: "soundboard",
+          thought: "speaker wants the member TGFF SAI to receive the Admin role",
+          action: "role-add",
           confidence: 0.92,
           arguments: {
-            sound_name: "wtf",
-          },
-        },
-      },
-    ],
+            target_scope: "named_users",
+            target_names: ["TGFF SAI"],
+            role_name: "admin"
+          }
+        }
+      }
+    ]
   };
 
   return [
@@ -293,7 +297,7 @@ async function interpretVoiceCommand(transcript, context) {
       body: JSON.stringify({
         model: config.GROQ_AGENT_MODEL,
         temperature: 0.1,
-        max_tokens: 450,
+        max_tokens: 600,
         messages: buildMessages(transcript, context),
       }),
     });

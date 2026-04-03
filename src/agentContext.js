@@ -49,7 +49,7 @@ function commandAvailability(guildSettings) {
   };
 }
 
-function buildAgentContext(guild, controller, speaker, guildSettings, runtimeVoiceSettings) {
+function buildSessionAgentContext(guild, controller, guildSettings, runtimeVoiceSettings) {
   const voiceChannels = [];
   const usersInChannels = {};
   for (const channel of guild.channels.cache.values()) {
@@ -58,51 +58,40 @@ function buildAgentContext(guild, controller, speaker, guildSettings, runtimeVoi
     }
 
     voiceChannels.push(channel.name);
-    usersInChannels[channel.name] = Array.from(channel.members.values())
-      .slice(0, 25)
-      .flatMap((member) => memberNames(member))
-      .slice(0, 25);
+    usersInChannels[channel.name] = Array.from(channel.members.values()).flatMap((member) => memberNames(member));
   }
 
   const textChannels = Array.from(guild.channels.cache.values())
     .filter((channel) => channel?.isTextBased?.() && channel.name)
-    .slice(0, 60)
     .map((channel) => channel.name);
 
   const roles = Array.from(guild.roles.cache.values())
     .filter((role) => role.id !== guild.id)
-    .slice(0, 60)
     .map((role) => role.name);
 
-  const members = Array.from(guild.members.cache.values())
-    .slice(0, 80)
-    .map((member) => memberNames(member))
-    .flat();
+  const members = Array.from(guild.members.cache.values()).map((member) => ({
+    id: member.id,
+    names: memberNames(member),
+  }));
 
-  const sounds = Array.from(guild.soundboardSounds?.cache?.values?.() ?? [])
-    .slice(0, 40)
-    .map((sound) => sound.name);
+  const sounds = Array.from(guild.soundboardSounds?.cache?.values?.() ?? []).map((sound) => sound.name);
 
   return {
     guild_name: guild.name,
     wake_word: runtimeVoiceSettings.wakeWord,
     require_wake_word: Boolean(runtimeVoiceSettings.requireWakeWord),
-    speaker: {
-      id: speaker.id,
-      names: memberNames(speaker),
-    },
     session_owner: {
       id: controller.id,
       names: memberNames(controller),
     },
-    current_voice_channel: controller.voice.channel?.name ?? null,
-    speaker_voice_channel: speaker.voice.channel?.name ?? null,
     voice_channels: uniqueNames(voiceChannels),
     text_channels: uniqueNames(textChannels),
     roles: uniqueNames(roles),
     soundboard_sounds: uniqueNames(sounds),
-    known_member_names: uniqueNames(members).slice(0, 120),
-    users_in_channels: usersInChannels,
+    known_members: members,
+    users_in_channels: Object.fromEntries(
+      Object.entries(usersInChannels).map(([channelName, names]) => [channelName, uniqueNames(names)])
+    ),
     command_access: {
       join_user_ids: guildSettings.joinUserIds,
       command_user_ids: guildSettings.commandUserIds,
@@ -116,6 +105,24 @@ function buildAgentContext(guild, controller, speaker, guildSettings, runtimeVoi
   };
 }
 
+function buildRuntimeAgentContext(sessionAgentContext, controller, speaker, session) {
+  return {
+    ...sessionAgentContext,
+    speaker: {
+      id: speaker.id,
+      names: memberNames(speaker),
+    },
+    session_owner: {
+      id: controller.id,
+      names: memberNames(controller),
+    },
+    current_voice_channel: controller.voice.channel?.name ?? null,
+    speaker_voice_channel: speaker.voice.channel?.name ?? null,
+    recent_experience: Array.isArray(session?.agentExperience) ? session.agentExperience.slice(-8) : [],
+  };
+}
+
 module.exports = {
-  buildAgentContext,
+  buildRuntimeAgentContext,
+  buildSessionAgentContext,
 };

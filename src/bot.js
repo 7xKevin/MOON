@@ -10,7 +10,7 @@ const prism = require("prism-media");
 const { buildWakeWordCandidates, getGlobalVoiceCommandCatalog, getVoiceCommandGuide, normalizeText, parseVoiceCommand } = require("./commandParser");
 const { transcribePcmBuffer } = require("./transcriber");
 const { interpretVoiceCommand } = require("./agent");
-const { buildAgentContext } = require("./agentContext");
+const { buildRuntimeAgentContext, buildSessionAgentContext } = require("./agentContext");
 const {
   findRoleByName,
   findSoundboardSoundByName,
@@ -75,6 +75,21 @@ function createBot({ config, store }) {
       await store.recordCommandTelemetry(event);
     } catch (error) {
       log("Command telemetry failed", error?.details ?? error);
+    }
+  }
+
+  function rememberAgentExperience(session, entry) {
+    if (!session) {
+      return;
+    }
+
+    if (!Array.isArray(session.agentExperience)) {
+      session.agentExperience = [];
+    }
+
+    session.agentExperience.push(entry);
+    if (session.agentExperience.length > 12) {
+      session.agentExperience.splice(0, session.agentExperience.length - 12);
     }
   }
 
@@ -1068,12 +1083,11 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
     let command = null;
     if (config.AGENT_ENABLED && config.GROQ_API_KEY) {
       try {
-        const agentContext = buildAgentContext(
-          guild,
+        const agentContext = buildRuntimeAgentContext(
+          latestSession.agentBaseContext ?? buildSessionAgentContext(guild, controller, guildSettings, latestSession.runtimeVoiceSettings ?? session.runtimeVoiceSettings),
           controller,
           speaker,
-          guildSettings,
-          latestSession.runtimeVoiceSettings ?? session.runtimeVoiceSettings
+          latestSession
         );
         command = await interpretVoiceCommand(transcript, agentContext);
       } catch (error) {
@@ -1100,6 +1114,10 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
         status: "ignored",
         reason: "understanding-failed",
       });
+      rememberAgentExperience(latestSession, {
+        transcript,
+        outcome: "understanding-failed",
+      });
       return;
     }
 
@@ -1114,6 +1132,11 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
         totalLatencyMs: Date.now() - job.capturedAt,
         status: "blocked",
         reason: "clarification-requested",
+      });
+      rememberAgentExperience(latestSession, {
+        transcript,
+        outcome: "clarification-requested",
+        message: command.message || "Please clarify the command.",
       });
       return;
     }
@@ -1297,6 +1320,11 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
     }
 
     const ownerUserId = member.id;
+    await Promise.all([
+      member.guild.members.fetch().catch(() => null),
+      member.guild.channels.fetch().catch(() => null),
+      member.guild.soundboardSounds?.fetch?.().catch(() => null),
+    ]);
     const [guildSettings, globalAdminSettings] = await Promise.all([
       getGuildSettings(member.guild, ownerUserId),
       getGlobalAdminSettings(),
@@ -1324,6 +1352,7 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
       enqueueSpeech(member.guild, userId);
     };
 
+    const runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings, config);
     const session = {
       connection,
       receiver: connection.receiver,
@@ -1337,7 +1366,9 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
       focusUntil: 0,
       lastCommandAt: 0,
       guildSettingsSnapshot: guildSettings,
-      runtimeVoiceSettings: getRuntimeVoiceSettings(guildSettings, config),
+      runtimeVoiceSettings,
+      agentBaseContext: buildSessionAgentContext(member.guild, member, guildSettings, runtimeVoiceSettings),
+      agentExperience: [],
     };
 
     connection.receiver.speaking.on("start", onSpeakingStart);
