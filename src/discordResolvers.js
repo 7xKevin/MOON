@@ -178,8 +178,24 @@ async function findMemberByName(guild, rawName) {
   };
 }
 
+function normalizeSpokenNumbers(input) {
+  return input
+    .replace(/\bzero\b/g, "0")
+    .replace(/\bone\b/g, "1")
+    .replace(/\btwo\b/g, "2")
+    .replace(/\bthree\b/g, "3")
+    .replace(/\bfour\b/g, "4")
+    .replace(/\bfive\b/g, "5")
+    .replace(/\bsix\b/g, "6")
+    .replace(/\bseven\b/g, "7")
+    .replace(/\beight\b/g, "8")
+    .replace(/\bnine\b/g, "9")
+    .replace(/\bten\b/g, "10");
+}
+
 function normalizeChannelLookup(input) {
-  return normalizeText(input)
+  return normalizeSpokenNumbers(normalizeText(input))
+    .replace(/\b([vb])\s+([cb])\b/g, "$1$2")
     .replace(/\b(?:voice|vc|bc|room|channel|call)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
