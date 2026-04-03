@@ -9,6 +9,8 @@ const {
 const prism = require("prism-media");
 const { buildWakeWordCandidates, getGlobalVoiceCommandCatalog, getVoiceCommandGuide, normalizeText, parseVoiceCommand } = require("./commandParser");
 const { transcribePcmBuffer } = require("./transcriber");
+const { interpretVoiceCommand } = require("./agent");
+const { buildAgentContext } = require("./agentContext");
 const {
   findRoleByName,
   findSoundboardSoundByName,
@@ -1063,11 +1065,29 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
       return;
     }
 
-    const command = parseVoiceCommand(transcript, {
-      wakeWord: latestSession.runtimeVoiceSettings?.wakeWord ?? session.runtimeVoiceSettings.wakeWord,
-      requireWakeWord:
-        latestSession.runtimeVoiceSettings?.requireWakeWord ?? session.runtimeVoiceSettings.requireWakeWord,
-    });
+    let command = null;
+    if (config.AGENT_ENABLED && config.GROQ_API_KEY) {
+      try {
+        const agentContext = buildAgentContext(
+          guild,
+          controller,
+          speaker,
+          guildSettings,
+          latestSession.runtimeVoiceSettings ?? session.runtimeVoiceSettings
+        );
+        command = await interpretVoiceCommand(transcript, agentContext);
+      } catch (error) {
+        log("Agent understanding failed, falling back", error?.details ?? error);
+      }
+    }
+
+    if (!command) {
+      command = parseVoiceCommand(transcript, {
+        wakeWord: latestSession.runtimeVoiceSettings?.wakeWord ?? session.runtimeVoiceSettings.wakeWord,
+        requireWakeWord:
+          latestSession.runtimeVoiceSettings?.requireWakeWord ?? session.runtimeVoiceSettings.requireWakeWord,
+      });
+    }
     if (!command) {
       log(`Ignored transcript from ${speaker.user.tag}: ${transcript}`);
       await recordCommandTelemetry({
@@ -1078,7 +1098,22 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
         sttLatencyMs: transcription?.sttLatencyMs,
         totalLatencyMs: Date.now() - job.capturedAt,
         status: "ignored",
-        reason: "parse-failed",
+        reason: "understanding-failed",
+      });
+      return;
+    }
+
+    if (command.type === "clarify") {
+      await sendStatus(guild, command.message || "Please clarify the command.");
+      await recordCommandTelemetry({
+        ...telemetryBase,
+        transcript,
+        provider: transcription?.provider,
+        model: transcription?.model,
+        sttLatencyMs: transcription?.sttLatencyMs,
+        totalLatencyMs: Date.now() - job.capturedAt,
+        status: "blocked",
+        reason: "clarification-requested",
       });
       return;
     }
