@@ -264,7 +264,7 @@ function createBot({ config, store }) {
     );
   }
 
-  function memberHasDashboardAdmin(member, guildSettings) {
+  function memberHasDashboardAdmin(member) {
     if (member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return true;
     }
@@ -273,23 +273,15 @@ function createBot({ config, store }) {
       return true;
     }
 
-    return guildSettings.adminUserIds.includes(member.id);
+    return false;
   }
 
-  function memberCanUseVoiceCommands(member, session, guildSettings) {
-    if (member.id === session.ownerUserId) {
-      return true;
-    }
+  function memberCanJoinSession(member, guildSettings) {
+    return guildSettings.joinUserIds.includes(member.id);
+  }
 
-    if (memberHasDashboardAdmin(member, guildSettings)) {
-      return true;
-    }
-
-    if (guildSettings.commandUserIds.includes(member.id)) {
-      return true;
-    }
-
-    return guildSettings.allowedRoleIds.some((roleId) => member.roles.cache.has(roleId));
+  function memberCanUseVoiceCommands(member, guildSettings) {
+    return guildSettings.commandUserIds.includes(member.id);
   }
 
   function wait(ms) {
@@ -923,7 +915,7 @@ function createBot({ config, store }) {
       return;
     }
 
-    if (!memberCanUseVoiceCommands(speaker, session, guildSettings)) {
+    if (!memberCanUseVoiceCommands(speaker, guildSettings)) {
       await recordCommandTelemetry({
         ...telemetryBase,
         status: "blocked",
@@ -1111,7 +1103,7 @@ function createBot({ config, store }) {
     session.guildSettingsSnapshot = guildSettings;
     session.runtimeVoiceSettings = getRuntimeVoiceSettings(guildSettings, config);
 
-    if (!memberCanUseVoiceCommands(speaker, session, guildSettings)) {
+    if (!memberCanUseVoiceCommands(speaker, guildSettings)) {
       return;
     }
 
@@ -1291,8 +1283,13 @@ function createBot({ config, store }) {
           return;
         }
 
-        if (!memberHasDashboardAdmin(message.member, guildSettings)) {
-          await message.reply("Only server admins or configured MOON admins can start a session.");
+        if (!guildSettings.joinUserIds.length) {
+          await message.reply("No Join user IDs are configured for this server yet.");
+          return;
+        }
+
+        if (!memberCanJoinSession(message.member, guildSettings)) {
+          await message.reply("Only users in the Join user IDs list can start a session.");
           return;
         }
 
@@ -1306,8 +1303,13 @@ function createBot({ config, store }) {
       }
 
       if (commandName === "leave") {
-        if (!memberHasDashboardAdmin(message.member, guildSettings)) {
-          await message.reply("Only server admins or configured MOON admins can stop a session.");
+        if (!guildSettings.joinUserIds.length) {
+          await message.reply("No Join user IDs are configured for this server yet.");
+          return;
+        }
+
+        if (!memberCanJoinSession(message.member, guildSettings)) {
+          await message.reply("Only users in the Join user IDs list can stop a session.");
           return;
         }
 

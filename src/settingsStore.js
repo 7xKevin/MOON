@@ -49,13 +49,18 @@ function normalizeBoolean(value, fallback) {
 }
 
 function normalizeGuildSettings(input = {}, defaults = {}) {
+  const joinUserIds = parseStringList(input.joinUserIds ?? input.adminUserIds);
+  const commandUserIds = parseStringList(input.commandUserIds ?? input.listenUserIds);
+
   return {
     guildId: String(input.guildId ?? "").trim(),
     guildName: String(input.guildName ?? "Unknown Server").trim() || "Unknown Server",
     botEnabled: input.botEnabled !== false,
-    adminUserIds: parseStringList(input.adminUserIds),
-    commandUserIds: parseStringList(input.commandUserIds),
-    allowedRoleIds: parseStringList(input.allowedRoleIds),
+    joinUserIds,
+    commandUserIds,
+    adminUserIds: joinUserIds,
+    listenUserIds: commandUserIds,
+    allowedRoleIds: [],
     preferredTextChannelId: input.preferredTextChannelId ? String(input.preferredTextChannelId).trim() : "",
     preferredVoiceChannelId: input.preferredVoiceChannelId ? String(input.preferredVoiceChannelId).trim() : "",
     botPresent: input.botPresent === true,
@@ -82,7 +87,6 @@ function normalizeGuildSettings(input = {}, defaults = {}) {
     updatedAt: input.updatedAt ? new Date(input.updatedAt).toISOString() : new Date().toISOString(),
   };
 }
-
 function createDefaultGuildSettings(guildId, guildName, defaults = {}) {
   return normalizeGuildSettings(
     {

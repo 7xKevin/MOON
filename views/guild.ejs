@@ -63,9 +63,9 @@
                   <%= settings.botPresent ? 'MOON is already in this server' : 'MOON is not in this server yet' %>
                 </span>
               </div>
-              <h2 class="section-title section-title-offset">Define exactly who MOON listens to.</h2>
+              <h2 class="section-title section-title-offset">Define exactly who can run and speak to MOON.</h2>
               <p class="section-lead">
-                The session starter always keeps control. Discord admins keep access too. Everything else here is optional.
+                MOON follows two strict lists only: who can start a session, and whose voices MOON will actually capture.
               </p>
               <p class="section-lead">
                 Saved for <strong><%= currentUser.globalName || currentUser.username %></strong> only. Other Discord admins can keep their own MOON settings for this guild.
@@ -147,22 +147,17 @@
                 <h3 class="section-title">Access</h3>
                 <div class="field-grid">
                   <label>
-                    Admin user IDs
-                    <textarea name="adminUserIds"><%= settings.adminUserIds.join('\n') %></textarea>
-                    <span class="field-help">One Discord user ID per line. These users can start or stop MOON.</span>
+                    Join user IDs
+                    <textarea name="joinUserIds"><%= settings.joinUserIds.join('\n') %></textarea>
+                    <span class="field-help">Only these Discord user IDs can use <code>!join</code> and <code>!leave</code>.</span>
                   </label>
                   <label>
-                    Voice command user IDs
+                    Command user IDs
                     <textarea name="commandUserIds"><%= settings.commandUserIds.join('\n') %></textarea>
-                    <span class="field-help">Users allowed to speak commands while in the same voice channel.</span>
+                    <span class="field-help">MOON will only capture and transcribe voices from these user IDs.</span>
                   </label>
                 </div>
                 <div class="field-grid">
-                  <label>
-                    Voice command role IDs
-                    <textarea name="allowedRoleIds"><%= settings.allowedRoleIds.join('\n') %></textarea>
-                    <span class="field-help">Anyone with one of these roles can issue voice commands.</span>
-                  </label>
                   <label>
                     Preferred text channel ID
                     <input type="text" name="preferredTextChannelId" value="<%= settings.preferredTextChannelId %>" />
@@ -176,6 +171,7 @@
                     <span class="field-help">Reserved for future auto-join behavior.</span>
                   </label>
                 </div>
+                <p class="field-help">If a user ID is in the command list, MOON will execute that user's commands as long as the bot itself has permission, even if that user has a lower Discord role.</p>
               </section>
 
               <section class="form-section">
