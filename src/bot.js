@@ -7,7 +7,7 @@ const {
   joinVoiceChannel,
 } = require("@discordjs/voice");
 const prism = require("prism-media");
-const { buildWakeWordCandidates, getGlobalVoiceCommandCatalog, getVoiceCommandGuide, normalizeText, parseVoiceCommand } = require("./commandParser");
+const { buildWakeWordCandidates, getGlobalVoiceCommandCatalog, getVoiceCommandGuide, normalizeText, parseVoiceCommand, stripWakeWordPrefix } = require("./commandParser");
 const { transcribePcmBuffer } = require("./transcriber");
 const { interpretVoiceCommand } = require("./agent");
 const { buildRuntimeAgentContext, buildSessionAgentContext } = require("./agentContext");
@@ -644,6 +644,83 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
       return { status: "success", reason: "spam-started" };
     }
 
+    if (command.type === "call") {
+      const botMember = guild.members.me;
+      const channelMatch = await resolveTextChannelForCall(guild, session, command.channelName);
+      if (!channelMatch.channel) {
+        await sendStatus(guild, command.channelName
+          ? `I couldn't find a text channel named **${command.channelName}**.`
+          : "I couldn't find a text channel to send that call message.");
+        return { status: "blocked", reason: "text-channel-missing" };
+      }
+
+      if (channelMatch.ambiguous) {
+        const secondChannelName = channelMatch.secondChannel?.name;
+        await sendStatus(
+          guild,
+          secondChannelName
+            ? `I found multiple text channels close to **${command.channelName}**: **${channelMatch.channel.name}** and **${secondChannelName}**.`
+            : `I found multiple text channels close to **${command.channelName}**.`
+        );
+        return { status: "blocked", reason: "text-channel-ambiguous" };
+      }
+
+      if (!canSendText(channelMatch.channel, botMember)) {
+        await sendStatus(guild, `I can't send messages in **${channelMatch.channel.name}**.`);
+        return { status: "blocked", reason: "text-channel-no-send" };
+      }
+
+      const callTargets = await resolveCommandTargets(guild, speaker, controller, command, getTargetConfidenceFloor);
+      if (!callTargets.members.length) {
+        await sendStatus(
+          guild,
+          formatResolutionFailures(transcript, callTargets.failures) ?? `I heard \`${transcript}\`, but I couldn't confidently resolve the target.`
+        );
+        return { status: "blocked", reason: "target-resolution-failed" };
+      }
+
+      const humanTargets = callTargets.members.filter((member) => !member.user.bot);
+      const botTargets = callTargets.members.filter((member) => member.user.bot);
+
+      if (humanTargets.length) {
+        const mentionedIds = [...humanTargets.map((member) => member.id), speaker.id];
+        const targetMentions = humanTargets.map((member) => `<@${member.id}>`).join(" ");
+        await channelMatch.channel.send({
+          content: `${targetMentions}, <@${speaker.id}> is calling you to join **${controllerChannel.name}**.`,
+          allowedMentions: {
+            users: mentionedIds,
+            roles: [],
+            parse: [],
+          },
+        });
+      }
+
+      const unsupportedBots = [];
+      for (const botTarget of botTargets) {
+        const summonCommand = getBotCallCommand(botTarget);
+        if (!summonCommand) {
+          unsupportedBots.push(botTarget);
+          continue;
+        }
+
+        await channelMatch.channel.send(summonCommand);
+      }
+
+      if (unsupportedBots.length) {
+        await sendStatus(guild, `I don't have a supported summon command for ${formatMemberList(unsupportedBots)} yet.`);
+      }
+
+      if (callTargets.failures.length) {
+        await sendStatus(guild, formatResolutionFailures(transcript, callTargets.failures));
+      }
+
+      if (humanTargets.length || botTargets.length) {
+        await sendStatus(guild, `Sent the call in **${channelMatch.channel.name}** for ${formatMemberList(callTargets.members)}.`);
+        return { status: "success", reason: botTargets.length ? "call-mixed" : "call" };
+      }
+
+      return { status: "blocked", reason: "call-no-target" };
+    }
     if (command.type === "mention") {
       const botMember = guild.members.me;
       const channelMatch = await resolveTextChannel(guild, command.channelName);
@@ -1076,6 +1153,23 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
         totalLatencyMs: Date.now() - job.capturedAt,
         status: "ignored",
         reason: "ignorable-transcript",
+      });
+      return;
+    }
+
+    const effectiveWakeWord = latestSession.runtimeVoiceSettings?.wakeWord ?? session.runtimeVoiceSettings.wakeWord;
+    const requireWakeWord =
+      latestSession.runtimeVoiceSettings?.requireWakeWord ?? session.runtimeVoiceSettings.requireWakeWord;
+    if (requireWakeWord && !stripWakeWordPrefix(normalizeText(transcript), effectiveWakeWord, true)) {
+      await recordCommandTelemetry({
+        ...telemetryBase,
+        transcript,
+        provider: transcription?.provider,
+        model: transcription?.model,
+        sttLatencyMs: transcription?.sttLatencyMs,
+        totalLatencyMs: Date.now() - job.capturedAt,
+        status: "ignored",
+        reason: "wake-word-missing",
       });
       return;
     }

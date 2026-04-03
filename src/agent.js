@@ -144,6 +144,20 @@ function buildAgentCommand(decision, transcript) {
     return channelName && targetSpec ? { type: "mention", channelName, targetSpec, targetName: targetSpec.names[0] ?? targetSpec.source, ...base } : null;
   }
 
+  if (action === "call") {
+    const targetSpec = buildTargetSpec(argumentsObject);
+    const channelName = String(argumentsObject?.channel_name ?? "").trim() || null;
+    return targetSpec
+      ? {
+          type: "call",
+          channelName,
+          targetSpec,
+          targetName: targetSpec.names[0] ?? targetSpec.source,
+          ...base,
+        }
+      : null;
+  }
+
   if (action === "drag") {
     const targetSpec = buildTargetSpec(argumentsObject);
     const destinationType = String(argumentsObject?.destination_type ?? "").trim().toLowerCase();
@@ -207,7 +221,7 @@ function buildMessages(transcript, context) {
     "Use recent_experience to repeat choices that already worked in this session and avoid choices that recently failed.",
     "If the request is ambiguous or unsafe, choose ask_clarification instead of guessing.",
     "Return JSON only.",
-    "Allowed actions: lock, unlock, mute, unmute, kick, drag, role-add, role-remove, say, mention, spam, spam-stop, soundboard, ask_clarification, no_op.",
+    "Allowed actions: lock, unlock, mute, unmute, kick, drag, role-add, role-remove, say, mention, call, spam, spam-stop, soundboard, ask_clarification, no_op.",
     "For target_scope use one of: me, current_channel, named_users.",
     "For drag destination_type use one of: here, named.",
     "For role actions, choose the closest exact member name from known_members and the closest exact role from roles.",
@@ -218,7 +232,7 @@ function buildMessages(transcript, context) {
     context,
     required_output_schema: {
       thought: "short reasoning string",
-      action: "lock|unlock|mute|unmute|kick|drag|role-add|role-remove|say|mention|spam|spam-stop|soundboard|ask_clarification|no_op",
+      action: "lock|unlock|mute|unmute|kick|drag|role-add|role-remove|say|mention|call|spam|spam-stop|soundboard|ask_clarification|no_op",
       confidence: 0.0,
       message: "only for ask_clarification",
       arguments: {
@@ -256,6 +270,19 @@ function buildMessages(transcript, context) {
           arguments: {
             target_scope: "named_users",
             target_names: ["aditya", "equinox"],
+            channel_name: "general chat"
+          }
+        }
+      },
+      {
+        transcript: "moon call aditya to vc from general chat",
+        output: {
+          thought: "speaker wants to call Aditya into the current voice channel using General chat",
+          action: "call",
+          confidence: 0.92,
+          arguments: {
+            target_scope: "named_users",
+            target_names: ["aditya"],
             channel_name: "general chat"
           }
         }
