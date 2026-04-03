@@ -120,6 +120,45 @@ function resolveTranscriberSettings(overrides = {}) {
   };
 }
 
+function selectDeepgramKeyterms(keyterms) {
+  const unique = [];
+  const seen = new Set();
+
+  for (const rawKeyterm of keyterms) {
+    const keyterm = String(rawKeyterm ?? "").trim();
+    if (!keyterm) {
+      continue;
+    }
+
+    const normalized = keyterm.toLowerCase();
+    if (seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    unique.push(keyterm);
+  }
+
+  let tokenBudget = 0;
+  const selected = [];
+
+  for (const keyterm of unique) {
+    const estimatedTokens = keyterm.split(/\s+/).filter(Boolean).length;
+    if (estimatedTokens > 8) {
+      continue;
+    }
+
+    if (tokenBudget + estimatedTokens > 180) {
+      break;
+    }
+
+    selected.push(keyterm);
+    tokenBudget += estimatedTokens;
+  }
+
+  return selected;
+}
+
 async function buildAudioFormData(wavBuffer, model, settings) {
   const form = new FormData();
   form.append("file", new Blob([wavBuffer], { type: "audio/wav" }), "command.wav");
@@ -160,9 +199,15 @@ async function transcribeViaDeepgram(wavBuffer, settings) {
   const url = new URL(config.DEEPGRAM_STT_URL);
   url.searchParams.set("model", settings.deepgramSttModel);
   url.searchParams.set("smart_format", "true");
-  url.searchParams.set("punctuate", "true");
-  url.searchParams.set("language", settings.whisperLanguage);
-  for (const keyterm of settings.keyterms) {
+  url.searchParams.set("numerals", "true");
+  url.searchParams.set("filler_words", "false");
+  if (settings.whisperLanguage === "auto") {
+    url.searchParams.set("detect_language", "true");
+  } else {
+    url.searchParams.set("language", settings.whisperLanguage);
+  }
+
+  for (const keyterm of selectDeepgramKeyterms(settings.keyterms)) {
     url.searchParams.append("keyterm", keyterm);
   }
 
