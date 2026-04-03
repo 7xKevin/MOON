@@ -225,6 +225,7 @@ function buildMessages(transcript, context) {
     "For target_scope use one of: me, current_channel, named_users.",
     "For drag destination_type use one of: here, named.",
     "For role actions, choose the closest exact member name from known_members and the closest exact role from roles.",
+    "For call actions, if the target user is clear and the speaker is already in voice, do not ask clarification just because channel_name is omitted. Use the session text channel by default and the speaker's current voice channel as the destination.",
   ].join(" ");
 
   const user = {
@@ -271,6 +272,18 @@ function buildMessages(transcript, context) {
             target_scope: "named_users",
             target_names: ["aditya", "equinox"],
             channel_name: "general chat"
+          }
+        }
+      },
+      {
+        transcript: "moon call aditya",
+        output: {
+          thought: "speaker wants to call Aditya into the speaker's current voice channel and the default session text channel is enough",
+          action: "call",
+          confidence: 0.93,
+          arguments: {
+            target_scope: "named_users",
+            target_names: ["aditya"]
           }
         }
       },
