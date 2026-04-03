@@ -231,6 +231,24 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
       .join(" ");
   }
 
+  function buildAgentRuntimeSettings(globalAdminSettings = null) {
+    return {
+      preferredProvider: globalAdminSettings?.preferredAgentProvider,
+      groqEnabled: globalAdminSettings?.groqAgentEnabled,
+      geminiEnabled: globalAdminSettings?.geminiAgentEnabled,
+      groqModel: globalAdminSettings?.groqAgentModel,
+      geminiModel: globalAdminSettings?.geminiAgentModel,
+    };
+  }
+
+  function describeUnderstandingPath(command) {
+    if (command?.understandingSource === "agent") {
+      return "agent:" + (command.understandingProvider || "unknown") + (command.understandingModel ? "/" + command.understandingModel : "");
+    }
+
+    return "parser:deterministic";
+  }
+
   function getSession(guildId) {
     return sessions.get(guildId);
   }
@@ -1206,7 +1224,7 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
     }
 
     let command = null;
-    if (config.AGENT_ENABLED && config.GROQ_API_KEY) {
+    if (config.AGENT_ENABLED) {
       try {
         const agentContext = buildRuntimeAgentContext(
           latestSession.agentBaseContext ?? buildSessionAgentContext(guild, controller, guildSettings, latestSession.runtimeVoiceSettings ?? session.runtimeVoiceSettings),
@@ -1214,7 +1232,7 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
           speaker,
           latestSession
         );
-        command = await interpretVoiceCommand(transcript, agentContext);
+        command = await interpretVoiceCommand(transcript, agentContext, buildAgentRuntimeSettings(globalAdminSettings));
       } catch (error) {
         log("Agent understanding failed, falling back", error?.details ?? error);
       }
@@ -1227,6 +1245,12 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
           latestSession.runtimeVoiceSettings?.requireWakeWord ?? session.runtimeVoiceSettings.requireWakeWord,
       });
     }
+    if (command && !command.understandingSource) {
+      command.understandingSource = "parser";
+      command.understandingProvider = "deterministic";
+      command.understandingModel = "deterministic";
+    }
+
     if (!command) {
       log(`Ignored transcript from ${speaker.user.tag}: ${transcript}`);
       await recordCommandTelemetry({
@@ -1284,6 +1308,9 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
       speaker: speaker.user.tag,
       transcript,
       confidence: command.confidence,
+      sttProvider: transcription?.provider ?? "unknown",
+      sttModel: transcription?.model ?? "unknown",
+      understanding: describeUnderstandingPath(command),
     });
 
     const executionResult = await executeVoiceCommand(

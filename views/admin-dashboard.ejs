@@ -150,6 +150,58 @@
           <section class="card admin-panel">
             <div class="card-body form-section">
               <div class="admin-section-head">
+                <h2 class="section-title">Agent providers</h2>
+                <span class="meta">Choose which reasoning model MOON uses after STT.</span>
+              </div>
+
+              <div class="admin-provider-list">
+                <% if (!agentProviderCatalog.length) { %>
+                  <div class="meta">No agent providers are configured in this environment yet.</div>
+                <% } %>
+                <% agentProviderCatalog.forEach((provider) => { %>
+                  <article class="admin-provider-row">
+                    <div class="admin-provider-main">
+                      <label class="toggle admin-toggle admin-provider-toggle">
+                        <input type="checkbox" name="<%= provider.toggleName %>" <%= provider.enabled ? "checked" : "" %> />
+                        <span class="toggle-copy">
+                          <span><%= provider.label %></span>
+                          <small><%= provider.description %></small>
+                        </span>
+                      </label>
+                    </div>
+                    <div class="admin-provider-config">
+                      <label>
+                        Model
+                        <select name="<%= provider.modelName %>">
+                          <% provider.models.forEach((model) => { %>
+                            <option value="<%= model %>" <%= provider.currentModel === model ? "selected" : "" %>><%= model %></option>
+                          <% }) %>
+                        </select>
+                      </label>
+                    </div>
+                  </article>
+                <% }) %>
+              </div>
+
+              <% if (agentProviderCatalog.length) { %>
+                <div class="field-grid">
+                  <label>
+                    Primary agent provider
+                    <select name="preferredAgentProvider">
+                      <% agentProviderCatalog.forEach((provider) => { %>
+                        <option value="<%= provider.key %>" <%= settings.preferredAgentProvider === provider.key ? 'selected' : '' %>><%= provider.label %></option>
+                      <% }) %>
+                    </select>
+                    <span class="field-help">MOON tries this agent first, then falls back through the other enabled agent providers.</span>
+                  </label>
+                </div>
+              <% } %>
+            </div>
+          </section>
+
+          <section class="card admin-panel">
+            <div class="card-body form-section">
+              <div class="admin-section-head">
                 <h2 class="section-title">Defaults</h2>
                 <span class="meta">Applied to runtime baselines and new guild profiles.</span>
               </div>

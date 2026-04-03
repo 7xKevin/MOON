@@ -154,6 +154,8 @@ module.exports = {
     hasDeepgramStt: Boolean(config.DEEPGRAM_API_KEY),
     hasAssemblyAiStt: Boolean(config.ASSEMBLYAI_API_KEY),
     hasLocalWhisper: Boolean(config.WHISPER_CPP_PATH && config.WHISPER_MODEL_PATH),
+    hasGroqAgent: Boolean(config.GROQ_API_KEY),
+    hasGeminiAgent: Boolean(config.GEMINI_API_KEY),
     isProduction: process.env.NODE_ENV === "production",
   },
 };

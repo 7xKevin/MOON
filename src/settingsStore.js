@@ -112,6 +112,16 @@ function normalizeGlobalAdminSettings(input = {}, defaults = {}) {
     String(input.preferredSttProvider ?? defaults.preferredSttProvider ?? enabledProviders[0] ?? "groq")
       .trim()
       .toLowerCase() || "groq";
+  const groqAgentEnabled = normalizeBoolean(input.groqAgentEnabled, defaults.groqAgentEnabled === true);
+  const geminiAgentEnabled = normalizeBoolean(input.geminiAgentEnabled, defaults.geminiAgentEnabled === true);
+  const enabledAgentProviders = [
+    groqAgentEnabled ? "groq" : null,
+    geminiAgentEnabled ? "gemini" : null,
+  ].filter(Boolean);
+  const preferredAgentCandidate =
+    String(input.preferredAgentProvider ?? defaults.preferredAgentProvider ?? enabledAgentProviders[0] ?? "gemini")
+      .trim()
+      .toLowerCase() || "gemini";
 
   return {
     globalBotEnabled: normalizeBoolean(input.globalBotEnabled, defaults.globalBotEnabled !== false),
@@ -132,6 +142,15 @@ function normalizeGlobalAdminSettings(input = {}, defaults = {}) {
       String(input.deepgramSttModel ?? defaults.deepgramSttModel ?? "nova-3").trim() || "nova-3",
     assemblyAiSttModel:
       String(input.assemblyAiSttModel ?? defaults.assemblyAiSttModel ?? "universal-3-pro").trim() || "universal-3-pro",
+    groqAgentEnabled,
+    geminiAgentEnabled,
+    preferredAgentProvider: enabledAgentProviders.includes(preferredAgentCandidate)
+      ? preferredAgentCandidate
+      : enabledAgentProviders[0] ?? "gemini",
+    groqAgentModel:
+      String(input.groqAgentModel ?? defaults.groqAgentModel ?? "llama-3.3-70b-versatile").trim() || "llama-3.3-70b-versatile",
+    geminiAgentModel:
+      String(input.geminiAgentModel ?? defaults.geminiAgentModel ?? "gemini-2.5-flash").trim() || "gemini-2.5-flash",
     defaultWakeWord:
       String(input.defaultWakeWord ?? defaults.defaultWakeWord ?? "moon").trim() || "moon",
     defaultRequireWakeWord: normalizeBoolean(
@@ -358,6 +377,11 @@ class FileSettingsStore {
       groqSttModel: config.GROQ_STT_MODEL,
       deepgramSttModel: config.DEEPGRAM_STT_MODEL,
       assemblyAiSttModel: config.ASSEMBLYAI_STT_MODEL,
+      groqAgentEnabled: config.hasGroqAgent,
+      geminiAgentEnabled: config.hasGeminiAgent,
+      preferredAgentProvider: config.hasGeminiAgent ? "gemini" : config.hasGroqAgent ? "groq" : "gemini",
+      groqAgentModel: config.GROQ_AGENT_MODEL,
+      geminiAgentModel: config.GEMINI_AGENT_MODEL,
       defaultWakeWord: config.WAKE_WORD,
       defaultRequireWakeWord: config.REQUIRE_WAKE_WORD,
       defaultTranscriptionSilenceMs: config.TRANSCRIPTION_SILENCE_MS,
@@ -545,6 +569,11 @@ class PostgresSettingsStore {
       groqSttModel: config.GROQ_STT_MODEL,
       deepgramSttModel: config.DEEPGRAM_STT_MODEL,
       assemblyAiSttModel: config.ASSEMBLYAI_STT_MODEL,
+      groqAgentEnabled: config.hasGroqAgent,
+      geminiAgentEnabled: config.hasGeminiAgent,
+      preferredAgentProvider: config.hasGeminiAgent ? "gemini" : config.hasGroqAgent ? "groq" : "gemini",
+      groqAgentModel: config.GROQ_AGENT_MODEL,
+      geminiAgentModel: config.GEMINI_AGENT_MODEL,
       defaultWakeWord: config.WAKE_WORD,
       defaultRequireWakeWord: config.REQUIRE_WAKE_WORD,
       defaultTranscriptionSilenceMs: config.TRANSCRIPTION_SILENCE_MS,
@@ -639,6 +668,11 @@ class PostgresSettingsStore {
         groq_stt_model TEXT NOT NULL DEFAULT 'whisper-large-v3',
         deepgram_stt_model TEXT NOT NULL DEFAULT 'nova-3',
         assemblyai_stt_model TEXT NOT NULL DEFAULT 'universal-3-pro',
+        groq_agent_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        gemini_agent_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        preferred_agent_provider TEXT NOT NULL DEFAULT 'gemini',
+        groq_agent_model TEXT NOT NULL DEFAULT 'llama-3.3-70b-versatile',
+        gemini_agent_model TEXT NOT NULL DEFAULT 'gemini-2.5-flash',
         default_wake_word TEXT NOT NULL DEFAULT 'moon',
         default_require_wake_word BOOLEAN NOT NULL DEFAULT TRUE,
         default_transcription_silence_ms INTEGER NOT NULL DEFAULT 550,
@@ -653,7 +687,12 @@ class PostgresSettingsStore {
       ADD COLUMN IF NOT EXISTS deepgram_enabled BOOLEAN NOT NULL DEFAULT FALSE,
       ADD COLUMN IF NOT EXISTS assemblyai_enabled BOOLEAN NOT NULL DEFAULT FALSE,
       ADD COLUMN IF NOT EXISTS local_whisper_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-      ADD COLUMN IF NOT EXISTS assemblyai_stt_model TEXT NOT NULL DEFAULT 'universal-3-pro'
+      ADD COLUMN IF NOT EXISTS assemblyai_stt_model TEXT NOT NULL DEFAULT 'universal-3-pro',
+      ADD COLUMN IF NOT EXISTS groq_agent_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS gemini_agent_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS preferred_agent_provider TEXT NOT NULL DEFAULT 'gemini',
+      ADD COLUMN IF NOT EXISTS groq_agent_model TEXT NOT NULL DEFAULT 'llama-3.3-70b-versatile',
+      ADD COLUMN IF NOT EXISTS gemini_agent_model TEXT NOT NULL DEFAULT 'gemini-2.5-flash'
     `);
 
     await this.pool.query(`
@@ -704,6 +743,11 @@ class PostgresSettingsStore {
         groqSttModel: row.groq_stt_model,
         deepgramSttModel: row.deepgram_stt_model,
         assemblyAiSttModel: row.assemblyai_stt_model,
+        groqAgentEnabled: row.groq_agent_enabled,
+        geminiAgentEnabled: row.gemini_agent_enabled,
+        preferredAgentProvider: row.preferred_agent_provider,
+        groqAgentModel: row.groq_agent_model,
+        geminiAgentModel: row.gemini_agent_model,
         defaultWakeWord: row.default_wake_word,
         defaultRequireWakeWord: row.default_require_wake_word,
         defaultTranscriptionSilenceMs: row.default_transcription_silence_ms,
@@ -730,13 +774,18 @@ class PostgresSettingsStore {
           groq_stt_model,
           deepgram_stt_model,
           assemblyai_stt_model,
+          groq_agent_enabled,
+          gemini_agent_enabled,
+          preferred_agent_provider,
+          groq_agent_model,
+          gemini_agent_model,
           default_wake_word,
           default_require_wake_word,
           default_transcription_silence_ms,
           default_command_cooldown_ms,
           updated_at
         ) VALUES (
-          'global', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()
+          'global', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW()
         )
         ON CONFLICT (settings_key)
         DO UPDATE SET
@@ -750,6 +799,11 @@ class PostgresSettingsStore {
           groq_stt_model = EXCLUDED.groq_stt_model,
           deepgram_stt_model = EXCLUDED.deepgram_stt_model,
           assemblyai_stt_model = EXCLUDED.assemblyai_stt_model,
+          groq_agent_enabled = EXCLUDED.groq_agent_enabled,
+          gemini_agent_enabled = EXCLUDED.gemini_agent_enabled,
+          preferred_agent_provider = EXCLUDED.preferred_agent_provider,
+          groq_agent_model = EXCLUDED.groq_agent_model,
+          gemini_agent_model = EXCLUDED.gemini_agent_model,
           default_wake_word = EXCLUDED.default_wake_word,
           default_require_wake_word = EXCLUDED.default_require_wake_word,
           default_transcription_silence_ms = EXCLUDED.default_transcription_silence_ms,
@@ -767,6 +821,11 @@ class PostgresSettingsStore {
         normalized.groqSttModel,
         normalized.deepgramSttModel,
         normalized.assemblyAiSttModel,
+        normalized.groqAgentEnabled,
+        normalized.geminiAgentEnabled,
+        normalized.preferredAgentProvider,
+        normalized.groqAgentModel,
+        normalized.geminiAgentModel,
         normalized.defaultWakeWord,
         normalized.defaultRequireWakeWord,
         normalized.defaultTranscriptionSilenceMs,

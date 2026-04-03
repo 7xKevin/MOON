@@ -10,6 +10,8 @@ const DISCORD_API_BASE = "https://discord.com/api/v10";
 const GROQ_MODEL_OPTIONS = ["whisper-large-v3", "whisper-large-v3-turbo"];
 const DEEPGRAM_MODEL_OPTIONS = ["nova-3", "nova-2"];
 const ASSEMBLYAI_MODEL_OPTIONS = ["universal-3-pro"];
+const GROQ_AGENT_MODEL_OPTIONS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
+const GEMINI_AGENT_MODEL_OPTIONS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
 
 function avatarUrl(user) {
   if (!user?.avatar) {
@@ -128,6 +130,38 @@ function buildProviderCatalog(config, settings) {
   return providers;
 }
 
+function buildAgentProviderCatalog(config, settings) {
+  const providers = [];
+
+  if (config.hasGroqAgent) {
+    providers.push({
+      key: "groq",
+      label: "Groq",
+      description: "Groq-hosted reasoning model for the agent brain.",
+      enabled: settings.groqAgentEnabled,
+      currentModel: settings.groqAgentModel,
+      models: GROQ_AGENT_MODEL_OPTIONS,
+      toggleName: "groqAgentEnabled",
+      modelName: "groqAgentModel",
+    });
+  }
+
+  if (config.hasGeminiAgent) {
+    providers.push({
+      key: "gemini",
+      label: "Gemini",
+      description: "Google Gemini reasoning model for the agent brain.",
+      enabled: settings.geminiAgentEnabled,
+      currentModel: settings.geminiAgentModel,
+      models: GEMINI_AGENT_MODEL_OPTIONS,
+      toggleName: "geminiAgentEnabled",
+      modelName: "geminiAgentModel",
+    });
+  }
+
+  return providers;
+}
+
 async function exchangeCodeForToken(config, code) {
   const body = new URLSearchParams({
     client_id: config.DISCORD_CLIENT_ID,
@@ -187,6 +221,11 @@ function mapAdminForm(req, existingSettings) {
     groqSttModel: req.body.groqSttModel,
     deepgramSttModel: req.body.deepgramSttModel,
     assemblyAiSttModel: req.body.assemblyAiSttModel,
+    groqAgentEnabled: hasField("groqAgentEnabled") ? parseBoolean(req.body.groqAgentEnabled) : existingSettings.groqAgentEnabled,
+    geminiAgentEnabled: hasField("geminiAgentEnabled") ? parseBoolean(req.body.geminiAgentEnabled) : existingSettings.geminiAgentEnabled,
+    preferredAgentProvider: req.body.preferredAgentProvider,
+    groqAgentModel: req.body.groqAgentModel,
+    geminiAgentModel: req.body.geminiAgentModel,
     defaultWakeWord: req.body.defaultWakeWord,
     defaultRequireWakeWord: parseBoolean(req.body.defaultRequireWakeWord),
     defaultTranscriptionSilenceMs: req.body.defaultTranscriptionSilenceMs,
@@ -357,12 +396,14 @@ function createAdminApp({ config, store }) {
     try {
       const globalSettings = await store.getGlobalAdminSettings();
       const providerCatalog = buildProviderCatalog(config, globalSettings);
+      const agentProviderCatalog = buildAgentProviderCatalog(config, globalSettings);
 
       res.render("admin-dashboard", {
         title: "MOON ADMIN",
         saved: req.query.saved === "1",
         settings: globalSettings,
         providerCatalog,
+        agentProviderCatalog,
         systemStatus: {
           hasGroqStt: config.hasGroqStt,
           hasDeepgramStt: config.hasDeepgramStt,
@@ -371,6 +412,10 @@ function createAdminApp({ config, store }) {
           currentGroqModel: config.GROQ_STT_MODEL,
           currentDeepgramModel: config.DEEPGRAM_STT_MODEL,
           currentAssemblyAiModel: config.ASSEMBLYAI_STT_MODEL,
+          hasGroqAgent: config.hasGroqAgent,
+          hasGeminiAgent: config.hasGeminiAgent,
+          currentGroqAgentModel: config.GROQ_AGENT_MODEL,
+          currentGeminiAgentModel: config.GEMINI_AGENT_MODEL,
         },
       });
     } catch (error) {
