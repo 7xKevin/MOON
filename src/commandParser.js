@@ -22,6 +22,7 @@ const GLOBAL_VOICE_COMMANDS = [
   { syntax: 'mention <user> in <text-channel>', description: 'Mention one user in a text channel', family: 'mention' },
   { syntax: 'spam in <text-channel> text <message>', description: 'Send a short message 5 times in a text channel', family: 'spam' },
   { syntax: 'stop spam', description: 'Stop the active spam job for this server', family: 'spam-stop' },
+  { syntax: 'play <sound name>', description: 'Play a guild soundboard sound in the current voice channel', family: 'soundboard' },
 ];
 
 function normalizeText(input) {
@@ -567,6 +568,26 @@ function parseRoleCommand(tokens, commandText, rawTranscript) {
   return null;
 }
 
+function parseSoundboardCommand(tokens, commandText, rawTranscript) {
+  if (!tokens.length) {
+    return null;
+  }
+
+  const playMatch = detectAction(tokens, [{ type: 'soundboard', word: 'play' }], 0.7);
+  if (!playMatch) {
+    return null;
+  }
+
+  const soundName = cleanCommandText(tokens.slice(1).join(' '));
+  if (!soundName) {
+    return null;
+  }
+
+  return buildTextCommand('soundboard', commandText, rawTranscript, playMatch.score, {
+    soundName,
+  });
+}
+
 function parseTextCommand(tokens, commandText, rawTranscript) {
   if (!tokens.length) {
     return null;
@@ -685,6 +706,7 @@ function parseVoiceCommand(transcript, options = {}) {
     matchLockCommand(tokens, commandText, normalized) ||
     parseRoleCommand(tokens, commandText, normalized) ||
     parseDragCommand(tokens, commandText, normalized) ||
+    parseSoundboardCommand(tokens, commandText, normalized) ||
     parseTextCommand(tokens, commandText, normalized) ||
     parseTargetActionCommand(tokens, commandText, normalized)
   );

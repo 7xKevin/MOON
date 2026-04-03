@@ -117,6 +117,11 @@ function createBot({ config, store }) {
       addTerm(member.user.username);
     }
 
+    const soundboardSounds = Array.from(guild.soundboardSounds?.cache?.values?.() ?? []).slice(0, 25);
+    for (const sound of soundboardSounds) {
+      addTerm(sound.name);
+    }
+
     const channels = Array.from(guild.channels.cache.values()).slice(0, 40);
     for (const channel of channels) {
       addTerm(channel.name);
@@ -475,6 +480,28 @@ function createBot({ config, store }) {
       );
       await sendStatus(guild, `Unlocked **${controllerChannel.name}**.`);
       return { status: "success", reason: "unlock" };
+    }
+
+    if (command.type === "soundboard") {
+      const soundMatch = await findSoundboardSoundByName(guild, command.soundName);
+      if (!soundMatch.sound) {
+        await sendStatus(guild, `I couldn't find a soundboard sound named **${command.soundName}**.`);
+        return { status: "blocked", reason: "soundboard-missing" };
+      }
+
+      if (soundMatch.ambiguous) {
+        await sendStatus(
+          guild,
+          soundMatch.secondSound?.name
+            ? `I found multiple soundboard sounds close to **${command.soundName}**: **${soundMatch.sound.name}** and **${soundMatch.secondSound.name}**.`
+            : `I found multiple soundboard sounds close to **${command.soundName}**.`
+        );
+        return { status: "blocked", reason: "soundboard-ambiguous" };
+      }
+
+      await controllerChannel.sendSoundboardSound(soundMatch.sound);
+      await sendStatus(guild, `Played soundboard **${soundMatch.sound.name}** in **${controllerChannel.name}**.`);
+      return { status: "success", reason: "soundboard" };
     }
 
     if (command.type === "spam-stop") {

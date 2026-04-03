@@ -367,6 +367,91 @@ async function findTextChannelByName(guild, rawName) {
   };
 }
 
+function normalizeSoundboardLookup(input) {
+  return normalizeText(input)
+    .replace(/\bsound(?:board)?\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function scoreSoundboardName(candidate, lookup) {
+  const normalizedCandidate = normalizeSoundboardLookup(candidate);
+  const normalizedLookup = normalizeSoundboardLookup(lookup);
+
+  if (!normalizedCandidate || !normalizedLookup) {
+    return -1;
+  }
+
+  if (normalizedCandidate === normalizedLookup) {
+    return 1;
+  }
+
+  const compactCandidate = compactText(normalizedCandidate);
+  const compactLookup = compactText(normalizedLookup);
+
+  if (compactCandidate === compactLookup) {
+    return 1;
+  }
+
+  if (
+    compactCandidate.startsWith(compactLookup) ||
+    compactLookup.startsWith(compactCandidate)
+  ) {
+    return 0.94;
+  }
+
+  if (
+    compactCandidate.includes(compactLookup) ||
+    compactLookup.includes(compactCandidate)
+  ) {
+    return 0.88;
+  }
+
+  const candidatePhonetic = phoneticKey(normalizedCandidate);
+  const lookupPhonetic = phoneticKey(normalizedLookup);
+  if (candidatePhonetic && lookupPhonetic && candidatePhonetic === lookupPhonetic) {
+    return 0.93;
+  }
+
+  return similarityScore(normalizedCandidate, normalizedLookup);
+}
+
+async function findSoundboardSoundByName(guild, rawName) {
+  let sounds = guild.soundboardSounds?.cache;
+  if (!sounds?.size) {
+    sounds = await guild.soundboardSounds?.fetch().catch(() => null);
+  }
+
+  let best = null;
+  let second = null;
+
+  for (const sound of sounds?.values?.() ?? []) {
+    const score = scoreSoundboardName(sound.name, rawName);
+    if (score < 0) {
+      continue;
+    }
+
+    const candidate = { sound, score };
+    if (!best || score > best.score) {
+      second = best;
+      best = candidate;
+    } else if (!second || score > second.score) {
+      second = candidate;
+    }
+  }
+
+  if (!best || best.score < 0.72) {
+    return { sound: null, score: best?.score ?? -1, ambiguous: false, secondSound: second?.sound ?? null };
+  }
+
+  return {
+    sound: best.sound,
+    score: best.score,
+    ambiguous: Boolean(second && best.score - second.score < 0.035),
+    secondSound: second?.sound ?? null,
+  };
+}
+
 function normalizeRoleLookup(input) {
   return normalizeText(input)
     .replace(/\brole\b/g, " ")
@@ -659,6 +744,7 @@ async function resolveCommandTargets(guild, speaker, controller, command, getTar
 module.exports = {
   findMemberByName,
   findRoleByName,
+  findSoundboardSoundByName,
   findTextChannelByName,
   findVoiceChannelByName,
   formatMemberList,
@@ -667,4 +753,3 @@ module.exports = {
   resolveCommandTargets,
   uniqueMembers,
 };
-
