@@ -316,10 +316,159 @@ function buildMessages(transcript, context) {
     ]
   };
 
-  return [
-    { role: "system", content: system },
-    { role: "user", content: JSON.stringify(user) },
-  ];
+  return {
+    system,
+    user,
+  };
+}
+
+function buildDecisionSchema() {
+  return {
+    type: "object",
+    properties: {
+      thought: {
+        type: "string",
+        description: "Short reasoning string.",
+      },
+      action: {
+        type: "string",
+        enum: [
+          "lock",
+          "unlock",
+          "mute",
+          "unmute",
+          "kick",
+          "drag",
+          "role-add",
+          "role-remove",
+          "say",
+          "mention",
+          "call",
+          "spam",
+          "spam-stop",
+          "soundboard",
+          "ask_clarification",
+          "no_op",
+        ],
+      },
+      confidence: {
+        type: "number",
+        minimum: 0,
+        maximum: 1,
+      },
+      message: {
+        type: ["string", "null"],
+        description: "Only for ask_clarification.",
+      },
+      arguments: {
+        type: "object",
+        properties: {
+          target_scope: {
+            type: ["string", "null"],
+            enum: ["me", "current_channel", "named_users", null],
+          },
+          target_names: {
+            type: "array",
+            items: { type: "string" },
+          },
+          destination_type: {
+            type: ["string", "null"],
+            enum: ["here", "named", null],
+          },
+          destination_name: { type: ["string", "null"] },
+          source_channel_name: { type: ["string", "null"] },
+          channel_name: { type: ["string", "null"] },
+          role_name: { type: ["string", "null"] },
+          sound_name: { type: ["string", "null"] },
+          message: { type: ["string", "null"] },
+        },
+        required: ["target_names"],
+        additionalProperties: false,
+      },
+    },
+    required: ["thought", "action", "confidence", "arguments"],
+    additionalProperties: false,
+  };
+}
+
+async function requestGroqDecision(transcript, context, controller) {
+  const { system, user } = buildMessages(transcript, context);
+
+  const response = await fetch(config.GROQ_AGENT_URL, {
+    method: "POST",
+    signal: controller.signal,
+    headers: {
+      Authorization: `Bearer ${config.GROQ_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: config.GROQ_AGENT_MODEL,
+      temperature: 0.1,
+      max_tokens: 600,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: JSON.stringify(user) },
+      ],
+    }),
+  });
+
+  const body = await response.text();
+  if (!response.ok) {
+    throw createAgentError("Agent request failed.", body);
+  }
+
+  const payload = JSON.parse(body);
+  const content = payload?.choices?.[0]?.message?.content;
+  const jsonText = extractFirstJsonObject(content);
+  if (!jsonText) {
+    throw createAgentError("Agent response did not contain JSON.", content);
+  }
+
+  return JSON.parse(jsonText);
+}
+
+async function requestGeminiDecision(transcript, context, controller) {
+  const { system, user } = buildMessages(transcript, context);
+  const endpoint = `${config.GEMINI_AGENT_URL}/${encodeURIComponent(config.GEMINI_AGENT_MODEL)}:generateContent`;
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    signal: controller.signal,
+    headers: {
+      "x-goog-api-key": config.GEMINI_API_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `${system}\n\n${JSON.stringify(user)}`,
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: "application/json",
+        responseJsonSchema: buildDecisionSchema(),
+      },
+    }),
+  });
+
+  const body = await response.text();
+  if (!response.ok) {
+    throw createAgentError("Agent request failed.", body);
+  }
+
+  const payload = JSON.parse(body);
+  const content = payload?.candidates?.[0]?.content?.parts?.map((part) => part?.text ?? "").join("").trim();
+  if (!content) {
+    throw createAgentError("Agent response did not contain content.", body);
+  }
+
+  return JSON.parse(content);
 }
 
 async function interpretVoiceCommand(transcript, context) {
@@ -327,34 +476,9 @@ async function interpretVoiceCommand(transcript, context) {
   const timer = setTimeout(() => controller.abort(), config.AGENT_TIMEOUT_MS);
 
   try {
-    const response = await fetch(config.GROQ_AGENT_URL, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${config.GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: config.GROQ_AGENT_MODEL,
-        temperature: 0.1,
-        max_tokens: 600,
-        messages: buildMessages(transcript, context),
-      }),
-    });
-
-    const body = await response.text();
-    if (!response.ok) {
-      throw createAgentError("Agent request failed.", body);
-    }
-
-    const payload = JSON.parse(body);
-    const content = payload?.choices?.[0]?.message?.content;
-    const jsonText = extractFirstJsonObject(content);
-    if (!jsonText) {
-      throw createAgentError("Agent response did not contain JSON.", content);
-    }
-
-    const decision = JSON.parse(jsonText);
+    const decision = config.AGENT_PROVIDER === "gemini"
+      ? await requestGeminiDecision(transcript, context, controller)
+      : await requestGroqDecision(transcript, context, controller);
     return buildAgentCommand(decision, transcript);
   } catch (error) {
     if (error?.name === "AbortError") {

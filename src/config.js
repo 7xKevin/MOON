@@ -52,8 +52,12 @@ const schema = z.object({
   GROQ_STT_MODEL: z.string().default("whisper-large-v3"),
   GROQ_STT_URL: z.string().default("https://api.groq.com/openai/v1/audio/transcriptions"),
   AGENT_ENABLED: booleanFromEnv.default(true),
+  AGENT_PROVIDER: z.enum(["groq", "gemini"]).default("gemini"),
   GROQ_AGENT_MODEL: z.string().default("llama-3.3-70b-versatile"),
   GROQ_AGENT_URL: z.string().default("https://api.groq.com/openai/v1/chat/completions"),
+  GEMINI_API_KEY: optionalString,
+  GEMINI_AGENT_MODEL: z.string().default("gemini-2.5-flash"),
+  GEMINI_AGENT_URL: z.string().default("https://generativelanguage.googleapis.com/v1beta/models"),
   AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
   DEEPGRAM_API_KEY: optionalString,
   DEEPGRAM_STT_MODEL: z.string().default("nova-3"),
@@ -114,6 +118,14 @@ if (config.SERVICE_MODE === "bot" || config.SERVICE_MODE === "all") {
     );
   }
 
+  if (config.AGENT_ENABLED) {
+    if (config.AGENT_PROVIDER === "gemini") {
+      requireSetting("GEMINI_API_KEY", "using Gemini as the agent provider");
+    } else {
+      requireSetting("GROQ_API_KEY", "using Groq as the agent provider");
+    }
+  }
+
   if (process.env.NODE_ENV === "production") {
     requireSetting("DATABASE_URL", "running the bot in production with dashboard-managed settings");
   }
@@ -145,7 +157,3 @@ module.exports = {
     isProduction: process.env.NODE_ENV === "production",
   },
 };
-
-
-
-
