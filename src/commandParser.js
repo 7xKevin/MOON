@@ -202,6 +202,23 @@ function canonicalizeCommandText(input) {
     .trim();
 }
 
+function repairCommandText(input) {
+  return cleanCommandText(input)
+    .replace(/\bun lock\b/g, 'unlock')
+    .replace(/\bun mute\b/g, 'unmute')
+    .replace(/\blog\b/g, 'lock')
+    .replace(/\blok\b/g, 'lock')
+    .replace(/\bloke\b/g, 'lock')
+    .replace(/\bvee see\b/g, 'vc')
+    .replace(/\bwe see\b/g, 'vc')
+    .replace(/\bbe see\b/g, 'vc')
+    .replace(/\btext too\b/g, 'text')
+    .replace(/\btext two\b/g, 'text')
+    .replace(/\bdisconnect call\b/g, 'disconnect all')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function buildWakeWordCandidates(wakeWord) {
   const normalizedWakeWord = normalizeText(wakeWord);
   const compactWakeWord = compactText(normalizedWakeWord);
@@ -686,30 +703,51 @@ function parseVoiceCommand(transcript, options = {}) {
     return null;
   }
 
-  let commandText = stripWakeWordPrefix(normalized, options.wakeWord ?? 'moon', options.requireWakeWord ?? true);
-  if (!commandText && (options.requireWakeWord ?? true) && looksLikeDirectCommand(normalized)) {
-    commandText = cleanCommandText(normalized);
+  const commandTextCandidates = [];
+  const seenCandidates = new Set();
+  const pushCandidate = (value) => {
+    const repaired = repairCommandText(value);
+    const canonical = canonicalizeCommandText(repaired);
+    if (!canonical || seenCandidates.has(canonical)) {
+      return;
+    }
+
+    seenCandidates.add(canonical);
+    commandTextCandidates.push(canonical);
+  };
+
+  const wakeWord = options.wakeWord ?? 'moon';
+  const requireWakeWord = options.requireWakeWord ?? true;
+  const strippedCommand = stripWakeWordPrefix(normalized, wakeWord, requireWakeWord);
+  if (strippedCommand) {
+    pushCandidate(strippedCommand);
+    pushCandidate(repairCommandText(strippedCommand));
   }
 
-  if (!commandText) {
-    return null;
+  if (!requireWakeWord) {
+    pushCandidate(normalized);
   }
 
-  commandText = canonicalizeCommandText(commandText);
+  for (const commandText of commandTextCandidates) {
+    const tokens = commandText.split(' ').filter(Boolean);
+    if (!tokens.length) {
+      continue;
+    }
 
-  const tokens = commandText.split(' ').filter(Boolean);
-  if (!tokens.length) {
-    return null;
+    const parsed =
+      matchLockCommand(tokens, commandText, normalized) ||
+      parseRoleCommand(tokens, commandText, normalized) ||
+      parseDragCommand(tokens, commandText, normalized) ||
+      parseSoundboardCommand(tokens, commandText, normalized) ||
+      parseTextCommand(tokens, commandText, normalized) ||
+      parseTargetActionCommand(tokens, commandText, normalized);
+
+    if (parsed) {
+      return parsed;
+    }
   }
 
-  return (
-    matchLockCommand(tokens, commandText, normalized) ||
-    parseRoleCommand(tokens, commandText, normalized) ||
-    parseDragCommand(tokens, commandText, normalized) ||
-    parseSoundboardCommand(tokens, commandText, normalized) ||
-    parseTextCommand(tokens, commandText, normalized) ||
-    parseTargetActionCommand(tokens, commandText, normalized)
-  );
+  return null;
 }
 
 function getGlobalVoiceCommandCatalog() {

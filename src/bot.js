@@ -249,6 +249,20 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
     return "parser:deterministic";
   }
 
+  function normalizeUnderstandingMetadata(command) {
+    if (!command) {
+      return null;
+    }
+
+    if (!command.understandingSource) {
+      command.understandingSource = "parser";
+      command.understandingProvider = "deterministic";
+      command.understandingModel = "deterministic";
+    }
+
+    return command;
+  }
+
   function getSession(guildId) {
     return sessions.get(guildId);
   }
@@ -1223,8 +1237,14 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
       return;
     }
 
-    let command = null;
-    if (config.AGENT_ENABLED) {
+    let command = parseVoiceCommand(transcript, {
+      wakeWord: latestSession.runtimeVoiceSettings?.wakeWord ?? session.runtimeVoiceSettings.wakeWord,
+      requireWakeWord:
+        latestSession.runtimeVoiceSettings?.requireWakeWord ?? session.runtimeVoiceSettings.requireWakeWord,
+    });
+    command = normalizeUnderstandingMetadata(command);
+
+    if (!command && config.AGENT_ENABLED) {
       try {
         const agentContext = buildRuntimeAgentContext(
           latestSession.agentBaseContext ?? buildSessionAgentContext(guild, controller, guildSettings, latestSession.runtimeVoiceSettings ?? session.runtimeVoiceSettings),
@@ -1232,23 +1252,12 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
           speaker,
           latestSession
         );
-        command = await interpretVoiceCommand(transcript, agentContext, buildAgentRuntimeSettings(globalAdminSettings));
+        command = normalizeUnderstandingMetadata(
+          await interpretVoiceCommand(transcript, agentContext, buildAgentRuntimeSettings(globalAdminSettings))
+        );
       } catch (error) {
-        log("Agent understanding failed, falling back", error?.details ?? error);
+        log("Agent understanding failed after parser miss", error?.details ?? error);
       }
-    }
-
-    if (!command) {
-      command = parseVoiceCommand(transcript, {
-        wakeWord: latestSession.runtimeVoiceSettings?.wakeWord ?? session.runtimeVoiceSettings.wakeWord,
-        requireWakeWord:
-          latestSession.runtimeVoiceSettings?.requireWakeWord ?? session.runtimeVoiceSettings.requireWakeWord,
-      });
-    }
-    if (command && !command.understandingSource) {
-      command.understandingSource = "parser";
-      command.understandingProvider = "deterministic";
-      command.understandingModel = "deterministic";
     }
 
     if (!command) {
@@ -1322,6 +1331,13 @@ function buildTranscriptionPrompt(runtimeVoiceSettings, keyterms) {
       controller,
       speaker
     );
+    rememberAgentExperience(latestSession, {
+      transcript,
+      commandType: command.type,
+      understanding: describeUnderstandingPath(command),
+      outcome: executionResult?.status ?? "success",
+      reason: executionResult?.reason ?? command.type,
+    });
     await recordCommandTelemetry({
       ...telemetryBase,
       transcript,
