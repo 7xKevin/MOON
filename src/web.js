@@ -162,6 +162,19 @@ function ensureCsrfToken(req) {
   return req.session.csrfToken;
 }
 
+function regenerateSession(req) {
+  return new Promise((resolve, reject) => {
+    req.session.regenerate((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
 function requireCsrf(req, res, next) {
   if (!req.session?.csrfToken || req.body?.csrfToken !== req.session.csrfToken) {
     res.status(403).send("Invalid CSRF token.");
@@ -322,7 +335,20 @@ function createWebApp({ config, store }) {
 
   app.use(
     helmet({
-      contentSecurityPolicy: false,
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          baseUri: ["'self'"],
+          connectSrc: ["'self'"],
+          fontSrc: ["'self'"],
+          formAction: ["'self'"],
+          frameAncestors: ["'none'"],
+          imgSrc: ["'self'", "data:", "https://cdn.discordapp.com"],
+          objectSrc: ["'none'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'"],
+        },
+      },
       crossOriginEmbedderPolicy: false,
     })
   );
@@ -418,20 +444,25 @@ function createWebApp({ config, store }) {
         fetchDiscordResource("/users/@me/guilds", tokenResponse.access_token),
       ]);
 
-      req.session.user = {
+      const sessionUser = {
         id: user.id,
         username: user.username,
         globalName: user.global_name,
         avatar: user.avatar,
         avatarUrl: avatarUrl(user),
       };
-      req.session.guilds = guilds;
-      req.session.oauth = {
+      const sessionOauth = {
         accessToken: tokenResponse.access_token,
         refreshToken: tokenResponse.refresh_token,
         expiresAt: Date.now() + (tokenResponse.expires_in ?? 0) * 1000,
       };
       delete req.session.oauthState;
+
+      await regenerateSession(req);
+
+      req.session.user = sessionUser;
+      req.session.guilds = guilds;
+      req.session.oauth = sessionOauth;
 
       res.redirect("/dashboard");
     } catch (error) {

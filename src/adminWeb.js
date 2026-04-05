@@ -37,6 +37,19 @@ function ensureCsrfToken(req) {
   return req.session.csrfToken;
 }
 
+function regenerateSession(req) {
+  return new Promise((resolve, reject) => {
+    req.session.regenerate((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
 function requireAuth(req, res, next) {
   if (!req.session?.user) {
     res.redirect("/");
@@ -290,7 +303,20 @@ function createAdminApp({ config, store }) {
 
   app.use(
     helmet({
-      contentSecurityPolicy: false,
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          baseUri: ["'self'"],
+          connectSrc: ["'self'"],
+          fontSrc: ["'self'"],
+          formAction: ["'self'"],
+          frameAncestors: ["'none'"],
+          imgSrc: ["'self'", "data:", "https://cdn.discordapp.com"],
+          objectSrc: ["'none'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'"],
+        },
+      },
       crossOriginEmbedderPolicy: false,
     })
   );
@@ -362,7 +388,7 @@ function createAdminApp({ config, store }) {
       const tokenResponse = await exchangeCodeForToken(config, req.query.code);
       const user = await fetchDiscordResource("/users/@me", tokenResponse.access_token);
 
-      req.session.user = {
+      const sessionUser = {
         id: user.id,
         username: user.username,
         globalName: user.global_name,
@@ -370,6 +396,9 @@ function createAdminApp({ config, store }) {
         avatarUrl: avatarUrl(user),
       };
       delete req.session.oauthState;
+
+      await regenerateSession(req);
+      req.session.user = sessionUser;
 
       if (!isSuperAdmin(config, req.session.user)) {
         res.status(403).render("admin-home", {
